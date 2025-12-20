@@ -1,10 +1,11 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { UrlBar } from "@/components/request/UrlBar";
+import { ResponsePanel } from "@/components/response/ResponsePanel";
 import { useRequestStore } from "@/stores/requestStore";
 
 function App() {
-  const { method, url, loading, setMethod, setUrl, sendRequest } =
+  const { method, url, loading, error, response, setMethod, setUrl, sendRequest } =
     useRequestStore();
 
   return (
@@ -21,9 +22,13 @@ function App() {
         />
       }
       responsePanel={
-        <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-          Send a request to see the response
-        </div>
+        <ResponsePanel response={response} loading={loading} error={error}>
+          {response && (
+            <pre className="font-mono text-xs text-foreground whitespace-pre-wrap">
+              {response.body}
+            </pre>
+          )}
+        </ResponsePanel>
       }
     />
   );
