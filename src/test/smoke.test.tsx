@@ -3,10 +3,12 @@ import { describe, it, expect } from "vitest";
 import App from "../App";
 
 describe("App", () => {
-  it("renders the app shell", () => {
+  it("renders the app shell with sidebar", () => {
     render(<App />);
-    expect(screen.getByText("Sidebar")).toBeInTheDocument();
-    expect(screen.getByText("URL Bar")).toBeInTheDocument();
-    expect(screen.getByText("Response Panel")).toBeInTheDocument();
+    expect(screen.getByText("Hermes")).toBeInTheDocument();
+    expect(screen.getByText("Collections")).toBeInTheDocument();
+    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.getByText("No collections yet")).toBeInTheDocument();
+    expect(screen.getByText("No history yet")).toBeInTheDocument();
   });
 });

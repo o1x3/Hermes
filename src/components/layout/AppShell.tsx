@@ -1,22 +1,31 @@
+import { useRef } from "react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 
 export function AppShell({
   sidebar,
   urlBar,
   responsePanel,
 }: {
-  sidebar: React.ReactNode;
+  sidebar: (onCollapse: () => void) => React.ReactNode;
   urlBar: React.ReactNode;
   responsePanel: React.ReactNode;
 }) {
+  const sidebarRef = useRef<PanelImperativeHandle | null>(null);
+
+  const collapseSidebar = () => {
+    sidebarRef.current?.collapse();
+  };
+
   return (
     <div className="h-screen w-screen bg-background text-foreground overflow-hidden">
       <ResizablePanelGroup orientation="horizontal" id="hermes-main-layout">
         <ResizablePanel
+          panelRef={sidebarRef}
           defaultSize={20}
           minSize={15}
           maxSize={35}
@@ -24,7 +33,7 @@ export function AppShell({
           collapsedSize={0}
           id="sidebar"
         >
-          {sidebar}
+          {sidebar(collapseSidebar)}
         </ResizablePanel>
 
         <ResizableHandle />

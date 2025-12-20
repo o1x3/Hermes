@@ -1,13 +1,10 @@
 import { AppShell } from "@/components/layout/AppShell";
+import { Sidebar } from "@/components/layout/Sidebar";
 
 function App() {
   return (
     <AppShell
-      sidebar={
-        <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-          Sidebar
-        </div>
-      }
+      sidebar={(onCollapse) => <Sidebar onCollapse={onCollapse} />}
       urlBar={
         <div className="text-muted-foreground text-sm">URL Bar</div>
       }
