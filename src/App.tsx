@@ -1,12 +1,11 @@
-import { useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { UrlBar } from "@/components/request/UrlBar";
-import type { HttpMethod } from "@/components/request/MethodBadge";
+import { useRequestStore } from "@/stores/requestStore";
 
 function App() {
-  const [method, setMethod] = useState<HttpMethod>("GET");
-  const [url, setUrl] = useState("");
+  const { method, url, loading, setMethod, setUrl, sendRequest } =
+    useRequestStore();
 
   return (
     <AppShell
@@ -15,10 +14,10 @@ function App() {
         <UrlBar
           method={method}
           url={url}
-          loading={false}
+          loading={loading}
           onMethodChange={setMethod}
           onUrlChange={setUrl}
-          onSend={() => {}}
+          onSend={sendRequest}
         />
       }
       responsePanel={
