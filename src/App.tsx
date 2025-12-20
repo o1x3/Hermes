@@ -1,8 +1,22 @@
+import { AppShell } from "@/components/layout/AppShell";
+
 function App() {
   return (
-    <div>
-      <h1>Hermes</h1>
-    </div>
+    <AppShell
+      sidebar={
+        <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+          Sidebar
+        </div>
+      }
+      urlBar={
+        <div className="text-muted-foreground text-sm">URL Bar</div>
+      }
+      responsePanel={
+        <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+          Response Panel
+        </div>
+      }
+    />
   );
 }
 
