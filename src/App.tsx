@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { UrlBar } from "@/components/request/UrlBar";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
+import { JsonViewer } from "@/components/response/JsonViewer";
 import { useRequestStore } from "@/stores/requestStore";
 
 function App() {
@@ -23,11 +24,7 @@ function App() {
       }
       responsePanel={
         <ResponsePanel response={response} loading={loading} error={error}>
-          {response && (
-            <pre className="font-mono text-xs text-foreground whitespace-pre-wrap">
-              {response.body}
-            </pre>
-          )}
+          {response && <JsonViewer data={response.body} />}
         </ResponsePanel>
       }
     />
