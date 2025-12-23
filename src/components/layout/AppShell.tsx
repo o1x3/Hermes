@@ -26,11 +26,11 @@ export function AppShell({
       <ResizablePanelGroup orientation="horizontal" id="hermes-main-layout">
         <ResizablePanel
           panelRef={sidebarRef}
-          defaultSize={20}
-          minSize={15}
-          maxSize={35}
+          defaultSize="20%"
+          minSize="15%"
+          maxSize="35%"
           collapsible
-          collapsedSize={0}
+          collapsedSize="0%"
           id="sidebar"
         >
           {sidebar(collapseSidebar)}
@@ -38,7 +38,7 @@ export function AppShell({
 
         <ResizableHandle />
 
-        <ResizablePanel defaultSize={80} minSize={50} id="main">
+        <ResizablePanel defaultSize="80%" minSize="50%" id="main">
           <div className="flex h-full flex-col">
             <div className="shrink-0 border-b border-border p-3">
               {urlBar}
