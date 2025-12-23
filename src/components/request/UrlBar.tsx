@@ -4,10 +4,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MethodBadge, type HttpMethod } from "./MethodBadge";
-import { ChevronDown, Send } from "lucide-react";
+import { ChevronDown, Send, Loader2 } from "lucide-react";
 
 const METHODS: HttpMethod[] = [
   "GET",
@@ -35,34 +35,39 @@ export function UrlBar({
   onSend: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       {/* Method dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="outline"
-            className="flex items-center gap-1 px-2 h-9 min-w-[100px]"
+            variant="ghost"
+            className="flex items-center gap-1.5 px-3 h-10 bg-background hover:bg-background/80 border border-border rounded-lg"
           >
             <MethodBadge method={method} />
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
+        <DropdownMenuContent align="start" className="min-w-[140px]">
           {METHODS.map((m) => (
-            <DropdownMenuItem key={m} onClick={() => onMethodChange(m)}>
+            <DropdownMenuItem
+              key={m}
+              onClick={() => onMethodChange(m)}
+              className="gap-2"
+            >
               <MethodBadge method={m} />
+              <span className="text-muted-foreground text-xs">{m}</span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
       {/* URL input */}
-      <Input
+      <input
         data-testid="url-input"
         value={url}
         onChange={(e) => onUrlChange(e.target.value)}
         placeholder="Enter request URL"
-        className="flex-1 font-mono h-9"
+        className="flex-1 h-10 rounded-lg border border-border bg-background px-4 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-primary/50 transition-colors"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             onSend();
@@ -71,14 +76,28 @@ export function UrlBar({
       />
 
       {/* Send button */}
-      <Button
-        onClick={onSend}
-        disabled={loading}
-        className="h-9 px-4 gap-1.5"
-      >
-        <Send className="h-3.5 w-3.5" />
-        {loading ? "Sending…" : "Send"}
-      </Button>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={onSend}
+              disabled={loading}
+              size="lg"
+              className="h-10 px-5 rounded-lg gap-2 font-semibold text-sm"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {loading ? "Sending…" : "Send"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <span className="text-xs">⌘ Enter</span>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }

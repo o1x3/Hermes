@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "motion/react";
+import { ArrowUp } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -63,8 +64,10 @@ export function ResponsePanel({
 
   if (!response) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-        Send a request to see the response
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground/50">
+        <ArrowUp className="h-8 w-8" />
+        <p className="text-sm">Send a request to see the response</p>
+        <p className="text-xs">⌘ Enter</p>
       </div>
     );
   }

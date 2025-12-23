@@ -36,13 +36,15 @@ export function AppShell({
           {sidebar(collapseSidebar)}
         </ResizablePanel>
 
-        <ResizableHandle />
+        <ResizableHandle withHandle />
 
         <ResizablePanel defaultSize="80%" minSize="50%" id="main">
           <div className="flex h-full flex-col">
-            <div className="shrink-0 border-b border-border p-3">
+            {/* URL bar area — elevated, card-like */}
+            <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
               {urlBar}
             </div>
+            {/* Response area */}
             <div className="min-h-0 flex-1">{responsePanel}</div>
           </div>
         </ResizablePanel>
