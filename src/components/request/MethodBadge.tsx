@@ -1,13 +1,7 @@
 import { cn } from "@/lib/utils";
+import type { HttpMethod } from "@/types/request";
 
-export type HttpMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "HEAD"
-  | "OPTIONS";
+export type { HttpMethod };
 
 const methodColorMap: Record<HttpMethod, string> = {
   GET: "bg-method-get",

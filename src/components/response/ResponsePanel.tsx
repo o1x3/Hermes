@@ -2,15 +2,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ArrowUp } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-interface HttpResponse {
-  status: number;
-  status_text: string;
-  headers: Record<string, string>;
-  body: string;
-  time_ms: number;
-  size_bytes: number;
-}
+import type { HttpResponse } from "@/types/request";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
