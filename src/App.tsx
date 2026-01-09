@@ -2,14 +2,31 @@ import { useCallback } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { UrlBar } from "@/components/request/UrlBar";
+import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
 import { JsonViewer } from "@/components/response/JsonViewer";
 import { useRequestStore } from "@/stores/requestStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
 
 function App() {
-  const { method, url, loading, error, response, setMethod, setUrl, sendRequest } =
-    useRequestStore();
+  const {
+    method,
+    url,
+    loading,
+    error,
+    response,
+    params,
+    headers,
+    auth,
+    bodyConfig,
+    setMethod,
+    setUrl,
+    setHeaders,
+    setParams,
+    setBodyConfig,
+    setAuth,
+    sendRequest,
+  } = useRequestStore();
 
   const focusUrl = useCallback(() => {
     const input = document.querySelector<HTMLInputElement>(
@@ -32,6 +49,18 @@ function App() {
           onMethodChange={setMethod}
           onUrlChange={setUrl}
           onSend={sendRequest}
+        />
+      }
+      requestConfig={
+        <RequestConfigTabs
+          params={params}
+          headers={headers}
+          auth={auth}
+          bodyConfig={bodyConfig}
+          onParamsChange={setParams}
+          onHeadersChange={setHeaders}
+          onAuthChange={setAuth}
+          onBodyConfigChange={setBodyConfig}
         />
       }
       responsePanel={

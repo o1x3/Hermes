@@ -9,10 +9,12 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 export function AppShell({
   sidebar,
   urlBar,
+  requestConfig,
   responsePanel,
 }: {
   sidebar: (onCollapse: () => void) => React.ReactNode;
   urlBar: React.ReactNode;
+  requestConfig: React.ReactNode;
   responsePanel: React.ReactNode;
 }) {
   const sidebarRef = useRef<PanelImperativeHandle | null>(null);
@@ -39,14 +41,28 @@ export function AppShell({
         <ResizableHandle withHandle />
 
         <ResizablePanel defaultSize="80%" minSize="50%" id="main">
-          <div className="flex h-full flex-col">
-            {/* URL bar area — elevated, card-like */}
-            <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
-              {urlBar}
-            </div>
-            {/* Response area */}
-            <div className="min-h-0 flex-1">{responsePanel}</div>
-          </div>
+          <ResizablePanelGroup orientation="vertical" id="hermes-request-response">
+            {/* Request panel: URL bar + config tabs */}
+            <ResizablePanel defaultSize="45%" minSize="20%" id="request">
+              <div className="flex h-full flex-col">
+                {/* URL bar area */}
+                <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
+                  {urlBar}
+                </div>
+                {/* Config tabs area */}
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  {requestConfig}
+                </div>
+              </div>
+            </ResizablePanel>
+
+            <ResizableHandle />
+
+            {/* Response panel */}
+            <ResizablePanel defaultSize="55%" minSize="20%" id="response">
+              {responsePanel}
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
