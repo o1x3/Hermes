@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KeyValueEditor } from "./KeyValueEditor";
+import { AuthEditor } from "./AuthEditor";
 import type {
   HeaderEntry,
   ParamEntry,
@@ -30,9 +31,9 @@ export function RequestConfigTabs(props: RequestConfigTabsProps) {
     bodyConfig,
     onParamsChange,
     onHeadersChange,
+    onAuthChange,
   } = props;
-  // onAuthChange and onBodyConfigChange used in Tasks 5/6
-  void props.onAuthChange;
+  // onBodyConfigChange used in Task 6
   void props.onBodyConfigChange;
   const paramCount = countActive(params);
   const headerCount = countActive(headers);
@@ -94,7 +95,7 @@ export function RequestConfigTabs(props: RequestConfigTabsProps) {
       </TabsContent>
 
       <TabsContent value="auth" className="overflow-y-auto p-4">
-        <p className="text-xs text-muted-foreground">Auth editor — coming next</p>
+        <AuthEditor auth={auth} onChange={onAuthChange} />
       </TabsContent>
 
       <TabsContent value="body" className="overflow-y-auto p-4">
