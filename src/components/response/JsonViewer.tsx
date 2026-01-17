@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 
 type JsonValue =
   | string
@@ -17,7 +17,13 @@ interface LineDescriptor {
   };
 }
 
-export function JsonViewer({ data }: { data: string }) {
+interface JsonViewerProps {
+  data: string;
+  searchQuery?: string;
+  onMatchCount?: (count: number) => void;
+}
+
+export function JsonViewer({ data, searchQuery, onMatchCount }: JsonViewerProps) {
   const parsed = useMemo(() => {
     try {
       return JSON.parse(data) as JsonValue;
@@ -29,29 +35,57 @@ export function JsonViewer({ data }: { data: string }) {
   if (parsed === undefined) {
     return (
       <pre className="font-mono text-xs text-foreground whitespace-pre-wrap">
-        {data}
+        {searchQuery ? (
+          <HighlightedText text={data} query={searchQuery} />
+        ) : (
+          data
+        )}
       </pre>
     );
   }
 
   return (
     <div className="font-mono text-xs leading-5">
-      <JsonTree value={parsed} />
+      <JsonTree
+        value={parsed}
+        searchQuery={searchQuery}
+        onMatchCount={onMatchCount}
+      />
     </div>
   );
 }
 
-function JsonTree({ value }: { value: JsonValue }) {
+function JsonTree({
+  value,
+  searchQuery,
+  onMatchCount,
+}: {
+  value: JsonValue;
+  searchQuery?: string;
+  onMatchCount?: (count: number) => void;
+}) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const query = searchQuery?.trim() || "";
 
   const toggle = useCallback((id: string) => {
     setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
   const lines = useMemo(
-    () => buildLines(value, 0, true, "", collapsed),
-    [value, collapsed],
+    () => buildLines(value, 0, true, "", collapsed, query),
+    [value, collapsed, query],
   );
+
+  // Count matches when searchQuery changes
+  useEffect(() => {
+    if (!onMatchCount) return;
+    if (!query) {
+      onMatchCount(0);
+      return;
+    }
+    const count = countMatches(value, query);
+    onMatchCount(count);
+  }, [value, query, onMatchCount]);
 
   return (
     <>
@@ -80,26 +114,65 @@ function JsonTree({ value }: { value: JsonValue }) {
   );
 }
 
+function countMatches(value: JsonValue, query: string): number {
+  const lq = query.toLowerCase();
+  let count = 0;
+
+  function walk(v: JsonValue) {
+    if (v === null) {
+      if ("null".includes(lq)) count++;
+    } else if (typeof v === "string") {
+      count += countOccurrences(v, lq);
+    } else if (typeof v === "number") {
+      count += countOccurrences(String(v), lq);
+    } else if (typeof v === "boolean") {
+      count += countOccurrences(String(v), lq);
+    } else if (Array.isArray(v)) {
+      v.forEach(walk);
+    } else {
+      for (const [key, val] of Object.entries(v)) {
+        count += countOccurrences(key, lq);
+        walk(val);
+      }
+    }
+  }
+
+  walk(value);
+  return count;
+}
+
+function countOccurrences(text: string, query: string): number {
+  const lower = text.toLowerCase();
+  let count = 0;
+  let idx = 0;
+  while ((idx = lower.indexOf(query, idx)) !== -1) {
+    count++;
+    idx += query.length;
+  }
+  return count;
+}
+
 function buildLines(
   value: JsonValue,
   indent: number,
   isLast: boolean,
   path: string,
   collapsed: Record<string, boolean>,
+  query: string,
 ): LineDescriptor[] {
   const comma = !isLast ? <Comma /> : null;
 
   if (value === null) {
-    return [{ indent, content: <><Null />{comma}</> }];
+    return [{ indent, content: <><Null query={query} />{comma}</> }];
   }
   if (typeof value === "string") {
-    return [{ indent, content: <><Str value={value} />{comma}</> }];
+    return [{ indent, content: <><Str value={value} query={query} />{comma}</> }];
   }
   if (typeof value === "number") {
-    return [{ indent, content: <><Num value={value} />{comma}</> }];
+    return [{ indent, content: <><Num value={value} query={query} />{comma}</> }];
   }
   if (typeof value === "boolean") {
-    return [{ indent, content: <><Bool value={value} />{comma}</> }];
+    return [{ indent, content: <><Bool value={value} query={query} />{comma}</> }];
   }
 
   const isArray = Array.isArray(value);
@@ -154,6 +227,7 @@ function buildLines(
         i === count - 1,
         childPath,
         collapsed,
+        query,
       );
       lines.push(...childLines);
     });
@@ -175,9 +249,9 @@ function buildLines(
           indent: indent + 1,
           content: (
             <>
-              <Key value={key} />
+              <Key value={key} query={query} />
               <Bracket>: </Bracket>
-              <PrimitiveValue value={val} />
+              <PrimitiveValue value={val} query={query} />
               {childComma}
             </>
           ),
@@ -204,7 +278,7 @@ function buildLines(
           indent: indent + 1,
           content: (
             <>
-              <Key value={key} />
+              <Key value={key} query={query} />
               <Bracket>: {nestedOpen}{nestedClose}</Bracket>
               {childComma}
             </>
@@ -219,7 +293,7 @@ function buildLines(
           collapsible: { id: nestedId, label: nestedLabel },
           content: (
             <>
-              <Key value={key} />
+              <Key value={key} query={query} />
               <Bracket>: {nestedOpen} </Bracket>
               <span className="text-muted-foreground italic">
                 {nestedLabel}
@@ -238,7 +312,7 @@ function buildLines(
         collapsible: { id: nestedId, label: nestedLabel },
         content: (
           <>
-            <Key value={key} />
+            <Key value={key} query={query} />
             <Bracket>: {nestedOpen}</Bracket>
           </>
         ),
@@ -250,6 +324,7 @@ function buildLines(
         childIsLast,
         childPath,
         collapsed,
+        query,
       );
       // Skip the first line (opening bracket) and last line (closing bracket)
       // because we already rendered them inline with the key
@@ -277,31 +352,51 @@ function buildLines(
   return lines;
 }
 
-function PrimitiveValue({ value }: { value: string | number | boolean | null }) {
-  if (value === null) return <Null />;
-  if (typeof value === "string") return <Str value={value} />;
-  if (typeof value === "number") return <Num value={value} />;
-  return <Bool value={value} />;
+function PrimitiveValue({ value, query }: { value: string | number | boolean | null; query: string }) {
+  if (value === null) return <Null query={query} />;
+  if (typeof value === "string") return <Str value={value} query={query} />;
+  if (typeof value === "number") return <Num value={value} query={query} />;
+  return <Bool value={value} query={query} />;
 }
 
-function Key({ value }: { value: string }) {
-  return <span className="text-json-key">"{value}"</span>;
+function Key({ value, query }: { value: string; query: string }) {
+  return (
+    <span className="text-json-key">
+      "<HighlightedText text={value} query={query} />"
+    </span>
+  );
 }
 
-function Str({ value }: { value: string }) {
-  return <span className="text-json-string">"{escapeString(value)}"</span>;
+function Str({ value, query }: { value: string; query: string }) {
+  return (
+    <span className="text-json-string">
+      "<HighlightedText text={escapeString(value)} query={query} />"
+    </span>
+  );
 }
 
-function Num({ value }: { value: number }) {
-  return <span className="text-json-number">{String(value)}</span>;
+function Num({ value, query }: { value: number; query: string }) {
+  return (
+    <span className="text-json-number">
+      <HighlightedText text={String(value)} query={query} />
+    </span>
+  );
 }
 
-function Bool({ value }: { value: boolean }) {
-  return <span className="text-json-boolean">{String(value)}</span>;
+function Bool({ value, query }: { value: boolean; query: string }) {
+  return (
+    <span className="text-json-boolean">
+      <HighlightedText text={String(value)} query={query} />
+    </span>
+  );
 }
 
-function Null() {
-  return <span className="text-json-null">null</span>;
+function Null({ query }: { query: string }) {
+  return (
+    <span className="text-json-null">
+      <HighlightedText text="null" query={query} />
+    </span>
+  );
 }
 
 function Bracket({ children }: { children: React.ReactNode }) {
@@ -310,6 +405,44 @@ function Bracket({ children }: { children: React.ReactNode }) {
 
 function Comma() {
   return <span className="text-json-bracket">,</span>;
+}
+
+export function HighlightedText({
+  text,
+  query,
+}: {
+  text: string;
+  query: string;
+}) {
+  if (!query) return <>{text}</>;
+
+  const parts: React.ReactNode[] = [];
+  const lower = text.toLowerCase();
+  const lq = query.toLowerCase();
+  let lastIndex = 0;
+
+  let idx = lower.indexOf(lq);
+  while (idx !== -1) {
+    if (idx > lastIndex) {
+      parts.push(text.slice(lastIndex, idx));
+    }
+    parts.push(
+      <mark
+        key={idx}
+        className="bg-variable-highlight/30 text-inherit rounded-sm"
+      >
+        {text.slice(idx, idx + query.length)}
+      </mark>,
+    );
+    lastIndex = idx + query.length;
+    idx = lower.indexOf(lq, lastIndex);
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return <>{parts}</>;
 }
 
 function escapeString(s: string): string {

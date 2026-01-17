@@ -4,7 +4,6 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { UrlBar } from "@/components/request/UrlBar";
 import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
-import { JsonViewer } from "@/components/response/JsonViewer";
 import { useRequestStore } from "@/stores/requestStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
 
@@ -64,9 +63,7 @@ function App() {
         />
       }
       responsePanel={
-        <ResponsePanel response={response} loading={loading} error={error}>
-          {response && <JsonViewer data={response.body} />}
-        </ResponsePanel>
+        <ResponsePanel response={response} loading={loading} error={error} />
       }
     />
   );

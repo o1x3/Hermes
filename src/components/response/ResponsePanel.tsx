@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowUp } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
+import { HeadersViewer } from "./HeadersViewer";
+import { ResponseToolbar } from "./ResponseToolbar";
+import { JsonViewer } from "./JsonViewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { HttpResponse } from "@/types/request";
 
 function formatSize(bytes: number): string {
@@ -30,13 +35,16 @@ export function ResponsePanel({
   response,
   loading,
   error,
-  children,
 }: {
   response: HttpResponse | null;
   loading: boolean;
   error: string | null;
-  children?: React.ReactNode;
 }) {
+  const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [matchCount, setMatchCount] = useState(0);
+
   if (loading) {
     return <LoadingShimmer />;
   }
@@ -64,6 +72,8 @@ export function ResponsePanel({
     );
   }
 
+  const headerCount = Object.keys(response.headers).length;
+
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -73,21 +83,73 @@ export function ResponsePanel({
         transition={{ duration: 0.15 }}
         className="flex h-full flex-col"
       >
-        {/* Status + metadata bar */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <StatusBadge
-            status={response.status}
-            statusText={response.status_text}
-          />
-          <span className="text-xs text-muted-foreground">
-            {formatSize(response.size_bytes)} · {response.time_ms}ms
-          </span>
-        </div>
+        <Tabs defaultValue="body" className="flex h-full flex-col gap-0">
+          {/* Status bar + tabs + toolbar */}
+          <div className="flex items-center gap-2 border-b border-border px-4 py-1.5 shrink-0">
+            <StatusBadge
+              status={response.status}
+              statusText={response.status_text}
+            />
+            <TabsList
+              variant="line"
+              className="border-0 bg-transparent"
+            >
+              <TabsTrigger value="body" className="text-xs">
+                Body
+              </TabsTrigger>
+              <TabsTrigger value="headers" className="text-xs gap-1">
+                Headers
+                {headerCount > 0 && (
+                  <span className="text-[10px] font-semibold text-muted-foreground">
+                    ({headerCount})
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
 
-        {/* Body */}
-        <ScrollArea className="flex-1">
-          <div className="p-4">{children}</div>
-        </ScrollArea>
+            <div className="ml-auto flex items-center gap-2">
+              <ResponseToolbar
+                body={response.body}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                searchVisible={searchVisible}
+                onSearchVisibleChange={setSearchVisible}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                matchCount={matchCount}
+              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {formatSize(response.size_bytes)} · {response.time_ms}ms
+              </span>
+            </div>
+          </div>
+
+          {/* Body tab */}
+          <TabsContent value="body" className="flex-1 min-h-0">
+            {viewMode === "pretty" ? (
+              <ScrollArea className="h-full">
+                <div className="p-4">
+                  <JsonViewer
+                    data={response.body}
+                    searchQuery={searchQuery}
+                    onMatchCount={setMatchCount}
+                  />
+                </div>
+              </ScrollArea>
+            ) : (
+              <ScrollArea className="h-full">
+                <pre className="p-4 font-mono text-xs text-foreground whitespace-pre-wrap break-all">
+                  {response.body}
+                </pre>
+              </ScrollArea>
+            )}
+          </TabsContent>
+
+          {/* Headers tab */}
+          <TabsContent value="headers" className="flex-1 min-h-0">
+            <HeadersViewer headers={response.headers} />
+          </TabsContent>
+        </Tabs>
       </motion.div>
     </AnimatePresence>
   );
