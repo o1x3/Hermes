@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KeyValueEditor } from "./KeyValueEditor";
 import { AuthEditor } from "./AuthEditor";
+import { BodyEditor } from "./BodyEditor";
 import type {
   HeaderEntry,
   ParamEntry,
@@ -23,18 +24,16 @@ function countActive(entries: { key: string; enabled: boolean }[]): number {
   return entries.filter((e) => e.enabled && e.key).length;
 }
 
-export function RequestConfigTabs(props: RequestConfigTabsProps) {
-  const {
-    params,
-    headers,
-    auth,
-    bodyConfig,
-    onParamsChange,
-    onHeadersChange,
-    onAuthChange,
-  } = props;
-  // onBodyConfigChange used in Task 6
-  void props.onBodyConfigChange;
+export function RequestConfigTabs({
+  params,
+  headers,
+  auth,
+  bodyConfig,
+  onParamsChange,
+  onHeadersChange,
+  onAuthChange,
+  onBodyConfigChange,
+}: RequestConfigTabsProps) {
   const paramCount = countActive(params);
   const headerCount = countActive(headers);
   const hasBody = bodyConfig.type !== "none";
@@ -99,7 +98,7 @@ export function RequestConfigTabs(props: RequestConfigTabsProps) {
       </TabsContent>
 
       <TabsContent value="body" className="overflow-y-auto p-4">
-        <p className="text-xs text-muted-foreground">Body editor — coming next</p>
+        <BodyEditor body={bodyConfig} onChange={onBodyConfigChange} />
       </TabsContent>
     </Tabs>
   );
