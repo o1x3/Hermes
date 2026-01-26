@@ -1,8 +1,16 @@
 import { ChevronLeft, FolderClosed, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import type { Collection, Folder, SavedRequest } from "@/types/collection";
 
-export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
+interface SidebarProps {
+  onCollapse?: () => void;
+  collections: Collection[];
+  folders: Folder[];
+  requests: SavedRequest[];
+}
+
+export function Sidebar({ onCollapse, collections }: SidebarProps) {
   return (
     <div className="flex h-full flex-col bg-sidebar border-r border-sidebar-border">
       {/* Header */}
@@ -29,7 +37,13 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
           <SectionLabel icon={<FolderClosed className="h-3.5 w-3.5" />}>
             Collections
           </SectionLabel>
-          <EmptyState>No collections yet</EmptyState>
+          {collections.length === 0 ? (
+            <EmptyState>No collections yet</EmptyState>
+          ) : (
+            <p className="text-xs text-muted-foreground px-1">
+              {collections.length} collection{collections.length !== 1 && "s"}
+            </p>
+          )}
 
           <div className="my-3 mx-1 border-t border-sidebar-border" />
 
