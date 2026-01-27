@@ -1,82 +1,103 @@
-import { ChevronLeft, FolderClosed, Clock } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Button } from "@/components/ui/button";
+import { FolderClosed, Clock, Plus } from "lucide-react";
+import {
+  Sidebar as ShadcnSidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import type { Collection, Folder, SavedRequest } from "@/types/collection";
+import { CollectionTree } from "@/components/collections/CollectionTree";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface SidebarProps {
-  onCollapse?: () => void;
   collections: Collection[];
   folders: Folder[];
   requests: SavedRequest[];
+  onCreateCollection: () => void;
 }
 
-export function Sidebar({ onCollapse, collections }: SidebarProps) {
+export function Sidebar({
+  collections,
+  folders,
+  requests,
+  onCreateCollection,
+}: SidebarProps) {
   return (
-    <div className="flex h-full flex-col bg-sidebar border-r border-sidebar-border">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 h-[53px] shrink-0">
-        <span className="font-bold text-sidebar-foreground tracking-tight">
+    <ShadcnSidebar collapsible="icon">
+      <SidebarHeader className="flex-row items-center justify-between">
+        <span className="font-bold text-sidebar-foreground tracking-tight text-sm group-data-[collapsible=icon]:hidden">
           Hermes
         </span>
-        {onCollapse && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={onCollapse}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+        <SidebarTrigger className="ml-auto" />
+      </SidebarHeader>
 
-      {/* Scrollable content */}
-      <ScrollArea className="flex-1">
-        <div className="px-3 py-2">
-          {/* Collections section */}
-          <SectionLabel icon={<FolderClosed className="h-3.5 w-3.5" />}>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>
+            <FolderClosed className="size-3.5 mr-1" />
             Collections
-          </SectionLabel>
-          {collections.length === 0 ? (
-            <EmptyState>No collections yet</EmptyState>
-          ) : (
-            <p className="text-xs text-muted-foreground px-1">
-              {collections.length} collection{collections.length !== 1 && "s"}
-            </p>
-          )}
+          </SidebarGroupLabel>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <SidebarGroupAction onClick={onCreateCollection}>
+                <Plus className="size-4" />
+              </SidebarGroupAction>
+            </TooltipTrigger>
+            <TooltipContent side="right">New Collection</TooltipContent>
+          </Tooltip>
+          <SidebarGroupContent>
+            {collections.length === 0 ? (
+              <div className="px-2 py-6 text-center">
+                <p className="text-[11px] text-muted-foreground/40">
+                  No collections yet
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 text-xs h-7"
+                  onClick={onCreateCollection}
+                >
+                  <Plus className="size-3 mr-1" />
+                  New Collection
+                </Button>
+              </div>
+            ) : (
+              <CollectionTree
+                collections={collections}
+                folders={folders}
+                requests={requests}
+              />
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-          <div className="my-3 mx-1 border-t border-sidebar-border" />
+        <SidebarSeparator />
 
-          {/* History section */}
-          <SectionLabel icon={<Clock className="h-3.5 w-3.5" />}>
+        <SidebarGroup>
+          <SidebarGroupLabel>
+            <Clock className="size-3.5 mr-1" />
             History
-          </SectionLabel>
-          <EmptyState>No history yet</EmptyState>
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <p className="text-[11px] text-muted-foreground/40 py-6 text-center">
+              No history yet
+            </p>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-function SectionLabel({
-  children,
-  icon,
-}: {
-  children: React.ReactNode;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1.5 mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-      {icon}
-      {children}
-    </div>
-  );
-}
-
-function EmptyState({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[11px] text-muted-foreground/40 py-6 text-center">
-      {children}
-    </p>
+      <SidebarRail />
+    </ShadcnSidebar>
   );
 }
