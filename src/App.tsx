@@ -6,9 +6,11 @@ import { UrlBar } from "@/components/request/UrlBar";
 import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
 import { CreateCollectionDialog } from "@/components/collections/CreateCollectionDialog";
+import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
+import { useAutoSave } from "@/hooks/useAutoSave";
 import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -40,6 +42,8 @@ function App() {
 
   const activeTab = useTabStore((s) => s.getActiveTab());
   const openNewTab = useTabStore((s) => s.openNewTab);
+  const closeTab = useTabStore((s) => s.closeTab);
+  const setActiveTab = useTabStore((s) => s.setActiveTab);
   const setMethod = useTabStore((s) => s.setMethod);
   const setUrl = useTabStore((s) => s.setUrl);
   const setHeaders = useTabStore((s) => s.setHeaders);
@@ -47,9 +51,14 @@ function App() {
   const setBodyConfig = useTabStore((s) => s.setBodyConfig);
   const setAuth = useTabStore((s) => s.setAuth);
   const sendRequest = useTabStore((s) => s.sendRequest);
+  const updateSavedSnapshot = useTabStore((s) => s.updateSavedSnapshot);
   const tabs = useTabStore((s) => s.tabs);
 
   const [showCreateCollection, setShowCreateCollection] = useState(false);
+  const [showSaveRequest, setShowSaveRequest] = useState(false);
+
+  // Auto-save dirty tabs that are already persisted
+  useAutoSave();
 
   // Load workspace on mount
   useEffect(() => {
@@ -61,7 +70,6 @@ function App() {
     if (tabs.length === 0) {
       openNewTab();
     }
-    // Only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -109,7 +117,58 @@ function App() {
     sendRequest(resolveAuth);
   }, [sendRequest]);
 
-  useKeyboard({ onSend: handleSend, onFocusUrl: focusUrl });
+  const handleSave = useCallback(async () => {
+    const tab = useTabStore.getState().getActiveTab();
+    if (!tab) return;
+
+    if (tab.savedRequestId) {
+      // Already saved — just persist current state
+      const updateReq = useCollectionStore.getState().updateSavedRequest;
+      await updateReq(tab.savedRequestId, {
+        method: tab.state.method,
+        url: tab.state.url,
+        headers: tab.state.headers,
+        params: tab.state.params,
+        body: tab.state.bodyConfig,
+        auth: tab.state.auth,
+      });
+      updateSavedSnapshot(tab.id);
+    } else {
+      // Not saved yet — show save dialog
+      setShowSaveRequest(true);
+    }
+  }, [updateSavedSnapshot]);
+
+  const handleCloseTab = useCallback(() => {
+    const tab = useTabStore.getState().getActiveTab();
+    if (tab) closeTab(tab.id);
+  }, [closeTab]);
+
+  const handlePrevTab = useCallback(() => {
+    const state = useTabStore.getState();
+    if (!state.activeTabId || state.tabs.length < 2) return;
+    const idx = state.tabs.findIndex((t) => t.id === state.activeTabId);
+    const prev = idx > 0 ? idx - 1 : state.tabs.length - 1;
+    setActiveTab(state.tabs[prev].id);
+  }, [setActiveTab]);
+
+  const handleNextTab = useCallback(() => {
+    const state = useTabStore.getState();
+    if (!state.activeTabId || state.tabs.length < 2) return;
+    const idx = state.tabs.findIndex((t) => t.id === state.activeTabId);
+    const next = idx < state.tabs.length - 1 ? idx + 1 : 0;
+    setActiveTab(state.tabs[next].id);
+  }, [setActiveTab]);
+
+  useKeyboard({
+    onSend: handleSend,
+    onFocusUrl: focusUrl,
+    onSave: handleSave,
+    onNewTab: openNewTab,
+    onCloseTab: handleCloseTab,
+    onPrevTab: handlePrevTab,
+    onNextTab: handleNextTab,
+  });
 
   const hasActiveTab = !!activeTab;
 
@@ -167,6 +226,11 @@ function App() {
       <CreateCollectionDialog
         open={showCreateCollection}
         onOpenChange={setShowCreateCollection}
+      />
+
+      <SaveRequestDialog
+        open={showSaveRequest}
+        onOpenChange={setShowSaveRequest}
       />
     </>
   );
