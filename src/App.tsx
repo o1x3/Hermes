@@ -64,6 +64,8 @@ function App() {
   const setBodyConfig = useTabStore((s) => s.setBodyConfig);
   const setAuth = useTabStore((s) => s.setAuth);
   const sendRequest = useTabStore((s) => s.sendRequest);
+  const openHistoryEntry = useTabStore((s) => s.openHistoryEntry);
+  const restoreFromHistory = useTabStore((s) => s.restoreFromHistory);
   const updateSavedSnapshot = useTabStore((s) => s.updateSavedSnapshot);
   const tabs = useTabStore((s) => s.tabs);
 
@@ -100,10 +102,10 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Stub: will be replaced with openHistoryEntry in Task 4
-  const handleOpenHistoryEntry = useCallback((_entry: HistoryEntry) => {
-    // Will be implemented with read-only tabs
-  }, []);
+  const handleOpenHistoryEntry = useCallback(
+    (entry: HistoryEntry) => openHistoryEntry(entry),
+    [openHistoryEntry],
+  );
 
   const focusUrl = useCallback(() => {
     const wrapper = document.querySelector('[data-testid="url-input"]');
@@ -304,16 +306,34 @@ function App() {
         }
         urlBar={
           hasActiveTab ? (
-            <UrlBar
-              method={activeTab.state.method}
-              url={activeTab.state.url}
-              loading={activeTab.state.loading}
-              onMethodChange={setMethod}
-              onUrlChange={setUrl}
-              onSend={handleSend}
-              variableItems={getVariableItems}
-              isVariableResolved={isVariableResolved}
-            />
+            <div>
+              {activeTab.readOnly && (
+                <div className="bg-muted/50 px-4 py-2 flex items-center justify-between text-xs border-b border-border mb-2 rounded-md">
+                  <span className="text-muted-foreground">
+                    History entry — read only
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-xs"
+                    onClick={restoreFromHistory}
+                  >
+                    Restore as New Request
+                  </Button>
+                </div>
+              )}
+              <UrlBar
+                method={activeTab.state.method}
+                url={activeTab.state.url}
+                loading={activeTab.state.loading}
+                disabled={activeTab.readOnly}
+                onMethodChange={setMethod}
+                onUrlChange={setUrl}
+                onSend={handleSend}
+                variableItems={getVariableItems}
+                isVariableResolved={isVariableResolved}
+              />
+            </div>
           ) : null
         }
         requestConfig={
@@ -330,6 +350,7 @@ function App() {
               inheritedAuth={inheritedAuth}
               variableItems={getVariableItems}
               isVariableResolved={isVariableResolved}
+              disabled={activeTab.readOnly}
             />
           ) : null
         }

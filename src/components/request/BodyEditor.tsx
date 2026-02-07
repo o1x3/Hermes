@@ -26,6 +26,7 @@ interface BodyEditorProps {
   onChange: (body: RequestBody) => void;
   variableItems?: () => VariableCompletionItem[];
   isVariableResolved?: (name: string) => boolean;
+  disabled?: boolean;
 }
 
 type BodyType = RequestBody["type"];
@@ -53,7 +54,7 @@ function defaultBody(type: BodyType): RequestBody {
   }
 }
 
-export function BodyEditor({ body, onChange, variableItems, isVariableResolved }: BodyEditorProps) {
+export function BodyEditor({ body, onChange, variableItems, isVariableResolved, disabled }: BodyEditorProps) {
   const handleTypeChange = useCallback(
     (type: string) => {
       onChange(defaultBody(type as BodyType));
@@ -102,7 +103,8 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved }
           <button
             key={t.value}
             onClick={() => handleTypeChange(t.value)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+            disabled={disabled}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${disabled ? "" : "cursor-pointer"} ${
               body.type === t.value
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:text-foreground"
@@ -157,6 +159,8 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved }
               onChange={(value) => onChange({ ...body, content: value })}
               extensions={extensions}
               theme={oneDark}
+              readOnly={disabled}
+              editable={!disabled}
               height="200px"
               basicSetup={{
                 lineNumbers: true,
@@ -176,6 +180,7 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved }
           onChange={(entries) => onChange({ ...body, entries })}
           keyPlaceholder="Key"
           valuePlaceholder="Value"
+          disabled={disabled}
         />
       )}
 

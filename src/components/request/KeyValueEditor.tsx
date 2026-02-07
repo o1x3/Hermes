@@ -14,6 +14,7 @@ interface KeyValueEditorProps {
   onChange: (entries: KVEntry[]) => void;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
+  disabled?: boolean;
 }
 
 export function KeyValueEditor({
@@ -21,6 +22,7 @@ export function KeyValueEditor({
   onChange,
   keyPlaceholder = "Key",
   valuePlaceholder = "Value",
+  disabled,
 }: KeyValueEditorProps) {
   const update = useCallback(
     (index: number, field: keyof KVEntry, value: string | boolean) => {
@@ -77,38 +79,45 @@ export function KeyValueEditor({
             checked={entry.enabled}
             onCheckedChange={(checked) => update(i, "enabled", !!checked)}
             className="size-3.5"
+            disabled={disabled}
           />
           <input
             value={entry.key}
             onChange={(e) => handleKeyInput(i, e.target.value)}
             placeholder={keyPlaceholder}
+            readOnly={disabled}
             className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-border/50 font-mono text-xs px-1 py-0.5 outline-none placeholder:text-muted-foreground/40 transition-colors"
           />
           <input
             value={entry.value}
             onChange={(e) => update(i, "value", e.target.value)}
             placeholder={valuePlaceholder}
+            readOnly={disabled}
             className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-border/50 font-mono text-xs px-1 py-0.5 outline-none placeholder:text-muted-foreground/40 transition-colors"
           />
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => remove(i)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-          >
-            <X className="size-3" />
-          </Button>
+          {!disabled && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => remove(i)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+            >
+              <X className="size-3" />
+            </Button>
+          )}
         </div>
       ))}
 
       {/* Add button */}
-      <button
-        onClick={add}
-        className="flex items-center gap-1 px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-      >
-        <Plus className="size-3" />
-        <span>Add</span>
-      </button>
+      {!disabled && (
+        <button
+          onClick={add}
+          className="flex items-center gap-1 px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <Plus className="size-3" />
+          <span>Add</span>
+        </button>
+      )}
     </div>
   );
 }

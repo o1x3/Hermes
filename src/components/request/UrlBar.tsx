@@ -86,6 +86,7 @@ export function UrlBar({
   method,
   url,
   loading,
+  disabled,
   onMethodChange,
   onUrlChange,
   onSend,
@@ -95,6 +96,7 @@ export function UrlBar({
   method: HttpMethod;
   url: string;
   loading: boolean;
+  disabled?: boolean;
   onMethodChange: (method: HttpMethod) => void;
   onUrlChange: (url: string) => void;
   onSend: () => void;
@@ -144,13 +146,14 @@ export function UrlBar({
     <div className="flex items-center gap-3">
       {/* Method dropdown */}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={disabled}>
           <Button
             variant="ghost"
             className="flex items-center gap-1.5 px-3 h-10 bg-background hover:bg-background/80 border border-border rounded-lg"
+            disabled={disabled}
           >
             <MethodBadge method={method} />
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            {!disabled && <ChevronDown className="h-3 w-3 text-muted-foreground" />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[140px]">
@@ -178,6 +181,8 @@ export function UrlBar({
           onChange={onUrlChange}
           extensions={extensions}
           theme="none"
+          readOnly={disabled}
+          editable={!disabled}
           placeholder="Enter request URL"
           basicSetup={{
             lineNumbers: false,
@@ -202,7 +207,7 @@ export function UrlBar({
       </div>
 
       {/* Send button */}
-      <TooltipProvider delayDuration={300}>
+      {!disabled && <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -223,7 +228,7 @@ export function UrlBar({
             <span className="text-xs">⌘ Enter</span>
           </TooltipContent>
         </Tooltip>
-      </TooltipProvider>
+      </TooltipProvider>}
     </div>
   );
 }

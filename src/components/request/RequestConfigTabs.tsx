@@ -27,6 +27,7 @@ interface RequestConfigTabsProps {
   inheritedAuth?: InheritedAuth | null;
   variableItems?: () => VariableCompletionItem[];
   isVariableResolved?: (name: string) => boolean;
+  disabled?: boolean;
 }
 
 function countActive(entries: { key: string; enabled: boolean }[]): number {
@@ -45,6 +46,7 @@ export function RequestConfigTabs({
   inheritedAuth,
   variableItems,
   isVariableResolved,
+  disabled,
 }: RequestConfigTabsProps) {
   const paramCount = countActive(params);
   const headerCount = countActive(headers);
@@ -93,6 +95,7 @@ export function RequestConfigTabs({
           onChange={onParamsChange}
           keyPlaceholder="Parameter"
           valuePlaceholder="Value"
+          disabled={disabled}
         />
       </TabsContent>
 
@@ -102,15 +105,16 @@ export function RequestConfigTabs({
           onChange={onHeadersChange}
           keyPlaceholder="Header"
           valuePlaceholder="Value"
+          disabled={disabled}
         />
       </TabsContent>
 
       <TabsContent value="auth" className="overflow-y-auto p-4">
-        <AuthEditor auth={auth} onChange={onAuthChange} inheritedAuth={inheritedAuth} />
+        <AuthEditor auth={auth} onChange={onAuthChange} inheritedAuth={inheritedAuth} disabled={disabled} />
       </TabsContent>
 
       <TabsContent value="body" className="overflow-y-auto p-4">
-        <BodyEditor body={bodyConfig} onChange={onBodyConfigChange} variableItems={variableItems} isVariableResolved={isVariableResolved} />
+        <BodyEditor body={bodyConfig} onChange={onBodyConfigChange} variableItems={variableItems} isVariableResolved={isVariableResolved} disabled={disabled} />
       </TabsContent>
     </Tabs>
   );

@@ -21,6 +21,7 @@ interface AuthEditorProps {
   auth: RequestAuth;
   onChange: (auth: RequestAuth) => void;
   inheritedAuth?: InheritedAuth | null;
+  disabled?: boolean;
 }
 
 const AUTH_TYPES = [
@@ -49,7 +50,7 @@ const AUTH_TYPE_LABELS: Record<string, string> = {
   apikey: "API Key",
 };
 
-export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
+export function AuthEditor({ auth, onChange, inheritedAuth, disabled }: AuthEditorProps) {
   const [showToken, setShowToken] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -60,6 +61,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
         <Select
           value={auth.type}
           onValueChange={(type) => onChange(defaults(type))}
+          disabled={disabled}
         >
           <SelectTrigger size="sm" className="w-48">
             <SelectValue />
@@ -106,6 +108,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
                 onChange({ ...auth, token: e.target.value })
               }
               placeholder="Enter bearer token"
+              readOnly={disabled}
               className="pr-9 font-mono text-xs h-8"
             />
             <Button
@@ -134,6 +137,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
                 onChange({ ...auth, username: e.target.value })
               }
               placeholder="Username"
+              readOnly={disabled}
               className="font-mono text-xs h-8"
             />
           </div>
@@ -147,6 +151,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
                   onChange({ ...auth, password: e.target.value })
                 }
                 placeholder="Password"
+                readOnly={disabled}
                 className="pr-9 font-mono text-xs h-8"
               />
               <Button
@@ -176,6 +181,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
                 onChange({ ...auth, key: e.target.value })
               }
               placeholder="e.g. X-API-Key"
+              readOnly={disabled}
               className="font-mono text-xs h-8"
             />
           </div>
@@ -187,6 +193,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
                 onChange({ ...auth, value: e.target.value })
               }
               placeholder="Enter API key value"
+              readOnly={disabled}
               className="font-mono text-xs h-8"
             />
           </div>
@@ -197,6 +204,7 @@ export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
               onValueChange={(addTo: "header" | "query") =>
                 onChange({ ...auth, addTo })
               }
+              disabled={disabled}
             >
               <SelectTrigger size="sm" className="w-32">
                 <SelectValue />
