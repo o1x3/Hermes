@@ -68,6 +68,7 @@ export function SaveRequestDialog({
         params: activeTab.state.params,
         body: activeTab.state.bodyConfig,
         auth: activeTab.state.auth,
+        variables: [],
       });
       linkTabToSaved(activeTab.id, saved.id, saved.name);
       onOpenChange(false);

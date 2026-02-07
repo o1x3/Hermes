@@ -8,6 +8,7 @@ import type {
   RequestAuth,
   RequestBody,
 } from "@/types/request";
+import type { VariableCompletionItem } from "@/lib/codemirror/variable-extension";
 
 interface InheritedAuth {
   auth: RequestAuth;
@@ -24,6 +25,8 @@ interface RequestConfigTabsProps {
   onAuthChange: (auth: RequestAuth) => void;
   onBodyConfigChange: (body: RequestBody) => void;
   inheritedAuth?: InheritedAuth | null;
+  variableItems?: () => VariableCompletionItem[];
+  isVariableResolved?: (name: string) => boolean;
 }
 
 function countActive(entries: { key: string; enabled: boolean }[]): number {
@@ -40,6 +43,8 @@ export function RequestConfigTabs({
   onAuthChange,
   onBodyConfigChange,
   inheritedAuth,
+  variableItems,
+  isVariableResolved,
 }: RequestConfigTabsProps) {
   const paramCount = countActive(params);
   const headerCount = countActive(headers);
@@ -105,7 +110,7 @@ export function RequestConfigTabs({
       </TabsContent>
 
       <TabsContent value="body" className="overflow-y-auto p-4">
-        <BodyEditor body={bodyConfig} onChange={onBodyConfigChange} />
+        <BodyEditor body={bodyConfig} onChange={onBodyConfigChange} variableItems={variableItems} isVariableResolved={isVariableResolved} />
       </TabsContent>
     </Tabs>
   );

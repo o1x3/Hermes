@@ -15,10 +15,17 @@ import { Button } from "@/components/ui/button";
 import { KeyValueEditor } from "./KeyValueEditor";
 import { Sparkles } from "lucide-react";
 import type { RequestBody, RawFormat } from "@/types/request";
+import {
+  variableHighlight,
+  variableAutocomplete,
+  type VariableCompletionItem,
+} from "@/lib/codemirror/variable-extension";
 
 interface BodyEditorProps {
   body: RequestBody;
   onChange: (body: RequestBody) => void;
+  variableItems?: () => VariableCompletionItem[];
+  isVariableResolved?: (name: string) => boolean;
 }
 
 type BodyType = RequestBody["type"];
@@ -46,7 +53,7 @@ function defaultBody(type: BodyType): RequestBody {
   }
 }
 
-export function BodyEditor({ body, onChange }: BodyEditorProps) {
+export function BodyEditor({ body, onChange, variableItems, isVariableResolved }: BodyEditorProps) {
   const handleTypeChange = useCallback(
     (type: string) => {
       onChange(defaultBody(type as BodyType));
@@ -66,17 +73,26 @@ export function BodyEditor({ body, onChange }: BodyEditorProps) {
 
   const extensions = useMemo(() => {
     if (body.type !== "raw") return [];
+    const exts = [];
     switch (body.format) {
       case "json":
-        return [json()];
+        exts.push(json());
+        break;
       case "xml":
-        return [xml()];
+        exts.push(xml());
+        break;
       case "text":
-        return [html()];
-      default:
-        return [];
+        exts.push(html());
+        break;
     }
-  }, [body.type, body.type === "raw" ? body.format : null]);
+    if (isVariableResolved) {
+      exts.push(variableHighlight(isVariableResolved));
+    }
+    if (variableItems) {
+      exts.push(variableAutocomplete(variableItems));
+    }
+    return exts;
+  }, [body.type, body.type === "raw" ? body.format : null, variableItems, isVariableResolved]);
 
   return (
     <div className="space-y-3">

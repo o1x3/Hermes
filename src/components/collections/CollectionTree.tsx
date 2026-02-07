@@ -112,6 +112,7 @@ function CollectionNode({
       params: [],
       body: { type: "none" },
       auth: { type: "none" },
+      variables: [],
     });
   }, [saveRequest, node.data.id]);
 
@@ -202,6 +203,7 @@ function FolderNode({
       params: [],
       body: { type: "none" },
       auth: { type: "none" },
+      variables: [],
     });
   }, [saveRequest, node.data.collectionId, node.data.id]);
 

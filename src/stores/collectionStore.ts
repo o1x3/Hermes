@@ -14,7 +14,9 @@ import {
   serializeParams,
   serializeBody,
   serializeAuth,
+  serializeVariables,
 } from "@/lib/workspace-utils";
+import { useEnvironmentStore } from "./environmentStore";
 
 interface CollectionState {
   collections: Collection[];
@@ -24,10 +26,10 @@ interface CollectionState {
 
   loadWorkspace: () => Promise<void>;
   createCollection: (name: string) => Promise<Collection>;
-  updateCollection: (id: string, updates: Partial<Pick<Collection, "name" | "description" | "defaultHeaders" | "defaultAuth">>) => Promise<void>;
+  updateCollection: (id: string, updates: Partial<Pick<Collection, "name" | "description" | "defaultHeaders" | "defaultAuth" | "variables">>) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   createFolder: (collectionId: string, name: string, parentFolderId?: string) => Promise<Folder>;
-  updateFolder: (id: string, updates: Partial<Pick<Folder, "name" | "defaultHeaders" | "defaultAuth">>) => Promise<void>;
+  updateFolder: (id: string, updates: Partial<Pick<Folder, "name" | "defaultHeaders" | "defaultAuth" | "variables">>) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
   saveRequest: (data: Omit<SavedRequest, "id" | "sortOrder" | "updatedAt" | "createdAt">) => Promise<SavedRequest>;
   updateSavedRequest: (id: string, data: Partial<Omit<SavedRequest, "id" | "collectionId" | "sortOrder" | "updatedAt" | "createdAt">>) => Promise<void>;
@@ -60,6 +62,11 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
         requests: workspace.requests,
         loading: false,
       });
+      // Initialize environment store from workspace data
+      useEnvironmentStore.getState().setEnvironments(
+        workspace.environments,
+        workspace.activeEnvironmentId,
+      );
     } catch (err) {
       console.error("Failed to load workspace:", err);
       set({ loading: false });
@@ -80,6 +87,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     if (updates.description !== undefined) data.description = updates.description;
     if (updates.defaultHeaders !== undefined) data.default_headers = serializeHeaders(updates.defaultHeaders);
     if (updates.defaultAuth !== undefined) data.default_auth = serializeAuth(updates.defaultAuth);
+    if (updates.variables !== undefined) data.variables = serializeVariables(updates.variables);
     await invoke("update_collection", { id, data });
     set((s) => ({
       collections: s.collections.map((c) =>
@@ -114,6 +122,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     if (updates.name !== undefined) data.name = updates.name;
     if (updates.defaultHeaders !== undefined) data.default_headers = serializeHeaders(updates.defaultHeaders);
     if (updates.defaultAuth !== undefined) data.default_auth = serializeAuth(updates.defaultAuth);
+    if (updates.variables !== undefined) data.variables = serializeVariables(updates.variables);
     await invoke("update_folder", { id, data });
     set((s) => ({
       folders: s.folders.map((f) =>
@@ -174,6 +183,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     if (data.body !== undefined) payload.body = serializeBody(data.body);
     if (data.auth !== undefined) payload.auth = serializeAuth(data.auth);
     if (data.folderId !== undefined) payload.folder_id = data.folderId;
+    if (data.variables !== undefined) payload.variables = serializeVariables(data.variables);
     await invoke("update_request", { id, data: payload });
     set((s) => ({
       requests: s.requests.map((r) =>

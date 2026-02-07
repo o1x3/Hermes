@@ -9,6 +9,7 @@ pub struct Collection {
     pub description: String,
     pub default_headers: String,
     pub default_auth: String,
+    pub variables: String,
     pub sort_order: i32,
     pub updated_at: String,
     pub created_at: String,
@@ -17,7 +18,7 @@ pub struct Collection {
 pub fn get_all(conn: &Connection) -> Result<Vec<Collection>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, description, default_headers, default_auth, sort_order, updated_at, created_at
+            "SELECT id, name, description, default_headers, default_auth, variables, sort_order, updated_at, created_at
              FROM collections ORDER BY sort_order, created_at",
         )
         .map_err(|e| e.to_string())?;
@@ -30,9 +31,10 @@ pub fn get_all(conn: &Connection) -> Result<Vec<Collection>, String> {
                 description: row.get(2)?,
                 default_headers: row.get(3)?,
                 default_auth: row.get(4)?,
-                sort_order: row.get(5)?,
-                updated_at: row.get(6)?,
-                created_at: row.get(7)?,
+                variables: row.get(5)?,
+                sort_order: row.get(6)?,
+                updated_at: row.get(7)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -57,7 +59,7 @@ pub fn create(conn: &Connection, name: &str) -> Result<Collection, String> {
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Collection, String> {
     conn.query_row(
-        "SELECT id, name, description, default_headers, default_auth, sort_order, updated_at, created_at
+        "SELECT id, name, description, default_headers, default_auth, variables, sort_order, updated_at, created_at
          FROM collections WHERE id = ?1",
         params![id],
         |row| {
@@ -67,9 +69,10 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Collection, String> {
                 description: row.get(2)?,
                 default_headers: row.get(3)?,
                 default_auth: row.get(4)?,
-                sort_order: row.get(5)?,
-                updated_at: row.get(6)?,
-                created_at: row.get(7)?,
+                variables: row.get(5)?,
+                sort_order: row.get(6)?,
+                updated_at: row.get(7)?,
+                created_at: row.get(8)?,
             })
         },
     )
@@ -82,6 +85,7 @@ pub struct UpdateCollection {
     pub description: Option<String>,
     pub default_headers: Option<String>,
     pub default_auth: Option<String>,
+    pub variables: Option<String>,
 }
 
 pub fn update(conn: &Connection, id: &str, data: &UpdateCollection) -> Result<(), String> {
@@ -103,6 +107,10 @@ pub fn update(conn: &Connection, id: &str, data: &UpdateCollection) -> Result<()
     if let Some(ref auth) = data.default_auth {
         sets.push(format!("default_auth = ?{}", values.len() + 1));
         values.push(Box::new(auth.clone()));
+    }
+    if let Some(ref variables) = data.variables {
+        sets.push(format!("variables = ?{}", values.len() + 1));
+        values.push(Box::new(variables.clone()));
     }
 
     let sql = format!(

@@ -1,8 +1,8 @@
 # Product Spec: Hermes
 
-**Version:** 0.4 (Phase 3 Complete)
+**Version:** 0.5 (Phase 4 Complete)
 **Date:** February 6, 2026
-**Status:** Phase 1 + Phase 2 + Phase 3 implemented
+**Status:** Phase 1 + Phase 2 + Phase 3 + Phase 4 implemented
 
 > *Hermes (Ἑρμῆς) — Greek god of messengers, speed, and communication. The fastest way to talk to your APIs.*
 
@@ -418,7 +418,7 @@ Files: 15 new, 10 modified, 1 deleted. All pass: cargo check, tsc, vite build, v
 
 ---
 
-### Phase 4 — Environments + Variables (Weeks 9–10)
+### Phase 4 — Environments + Variables (Weeks 9–10) ✅ COMPLETE
 
 **Goal:** Multiple environments with variables. Switch from top bar. Variables resolve everywhere.
 
@@ -453,6 +453,59 @@ Files: 15 new, 10 modified, 1 deleted. All pass: cargo check, tsc, vite build, v
 7. Set a collection-level variable — verify it resolves in child requests
 8. Mark a variable as secret — verify it shows as ••• in the editor
 9. Create a request-level override — verify it takes priority over env variable
+
+**What was implemented:**
+
+Architecture choices:
+- **Versioned migration system** — `schema_version` table tracks applied migrations. Each migration runs in a transaction. v0 is the baseline (collections/folders/requests), v1 adds environments, settings, and variables columns. Existing databases auto-migrate on startup.
+- **"Global" is a special environment** — seeded on first migration with deterministic ID `"global"` and `is_global = 1`. Cannot be deleted. Always lowest priority in variable scope.
+- **Settings as key-value store** — simple `settings(key TEXT, value TEXT)` table with `INSERT OR CONFLICT DO UPDATE`. Stores `active_environment_id`. Extensible for future preferences.
+- **Variable resolution in TypeScript** — all `{{var}}` substitution happens client-side before Tauri IPC. Single-pass regex replacement (no recursive resolution). Keeps Rust HTTP engine clean and unaware of variables.
+- **5-level variable scope** — priority (highest wins): Request > Folder chain (leaf > root) > Collection > Active Environment > Global. Computed via `buildScopeForRequest()` pure function.
+- **CodeMirror 6 for URL bar** — replaced plain `<input>` with single-line CodeMirror editor. Enables variable highlighting (amber background for resolved, red wavy underline for unresolved) and autocomplete (triggers on `{{`, shows name + value + scope source). `singleLine()` extension rejects newlines via `EditorState.transactionFilter`.
+- **Spreadsheet grid environment editor** — HTTPie-style: variable names as rows, environments as columns. Sheet slide-out from right. Inline rename column headers, add/delete environments, secret toggle per variable, add/delete rows. Flat grid state reconstructed from environment data on open, written back on save.
+- **Environment switcher in tab bar** — `DropdownMenu` (not Select) pushed to `ml-auto` right side of `RequestTabs`. Shows "No Environment", separator, env list with checkmarks, separator, "Manage Environments" link.
+
+Rust backend (src-tauri/):
+- `src/db/mod.rs` — versioned migration runner with `schema_version` table, `get_schema_version()`, `migrate_v0()` (baseline), `migrate_v1()` (environments + settings + variables columns)
+- `src/db/environments.rs` — Environment struct, CRUD (get_all, get_by_id, create, update, delete with global protection)
+- `src/db/settings.rs` — `get(key)` and `set(key, value)` with upsert
+- `src/db/collections.rs` — added `variables: String` field to Collection struct, all SELECTs, UpdateCollection
+- `src/db/folders.rs` — same pattern, added `variables` field
+- `src/db/requests.rs` — same pattern, added `variables` field
+- `src/commands.rs` — 6 new IPC commands (load_environments, create_environment, update_environment, delete_environment, get_setting, set_setting). Workspace struct expanded with `environments` and `active_environment_id`. Reorder whitelist includes "environments".
+- `src/lib.rs` — all new commands registered
+
+Frontend types & utils (src/):
+- `types/environment.ts` — Variable (key, value, secret?) and Environment interfaces
+- `types/collection.ts` — added `variables: Variable[]` to Collection, Folder, SavedRequest
+- `lib/workspace-utils.ts` — `parseEnvironment()`, `serializeVariables()`, `ParsedWorkspace` with environments + activeEnvironmentId, all existing parsers updated for variables field
+- `lib/variables.ts` — pure functions: `resolveString()`, `buildScope()`, `buildScopeWithAttribution()`, `resolveRequest()` (URL, headers, params, body variants, auth variants), `getFolderChain()`, `buildScopeForRequest()`, `buildAttributedScopeForRequest()`
+- `lib/variables.test.ts` — 29 unit tests: resolveString (single/multiple/unresolved/whitespace/nested/adjacent), buildScope (override/accumulate/empty keys), buildScopeWithAttribution (tracks source + secret), resolveRequest (URL/headers/params/raw body/form-data/bearer/basic/apikey auth/transient fields preserved), getFolderChain (root→leaf ordering, null, missing), buildScopeForRequest (full priority chain, no active env, empty)
+- `lib/codemirror/variable-extension.ts` — `variableHighlight()` (ViewPlugin scanning for `{{...}}`, resolved=amber, unresolved=red wavy), `variableAutocomplete()` (CompletionSource on `{{`, filters by prefix, shows name/value/source, inserts `{{name}}`), `singleLine()` (EditorState.transactionFilter rejecting newlines)
+
+Stores:
+- `stores/environmentStore.ts` — Zustand store: environments array, activeEnvironmentId, CRUD via invoke(), `setActiveEnvironment()` persists to settings, `setEnvironments()` called from collectionStore.loadWorkspace()
+- `stores/collectionStore.ts` — updated loadWorkspace to initialize environmentStore, updateCollection/updateFolder/updateSavedRequest handle variables field
+- `stores/tabStore.ts` — sendRequest accepts optional `variableScope: Map<string, string>`, applies `resolveRequest()` before auth injection and IPC call
+
+Components:
+- `components/environments/EnvSwitcher.tsx` — DropdownMenu with No Environment / env list / Manage Environments
+- `components/environments/EnvEditor.tsx` — Sheet slide-out with spreadsheet grid, `buildGrid()`/`gridToEnvironments()` transforms, inline rename, delete confirmation AlertDialog, secret toggle, add/remove rows and envs
+- `components/request/UrlBar.tsx` — rewritten with CodeMirror single-line editor, custom theme (JetBrains Mono, 40px height, transparent bg), variableHighlight + variableAutocomplete extensions, Mod-Enter/Mod-l keymaps
+- `components/request/BodyEditor.tsx` — variableHighlight + variableAutocomplete added to CodeMirror raw body editor extensions
+- `components/request/RequestConfigTabs.tsx` — passes variableItems/isVariableResolved through to BodyEditor
+- `components/layout/RequestTabs.tsx` — EnvSwitcher rendered with `ml-auto` in tab bar, accepts `onManageEnvironments` prop
+- `App.tsx` — computes `variableScopeContext` (scope + attributed) per active tab via useMemo, provides `isVariableResolved` and `getVariableItems` callbacks, manages EnvEditor sheet state, passes variable props to UrlBar + RequestConfigTabs
+
+Styling:
+- `index.css` — `.cm-variable-resolved` (amber oklch background, variable-highlight color), `.cm-variable-unresolved` (red background, wavy underline)
+- `--variable-highlight: #f59e0b` already defined in theme
+
+shadcn components added: popover
+Dependencies: no new npm packages (CodeMirror autocomplete/view/state already transitive deps of @uiw/react-codemirror)
+
+Files: 9 new, 16 modified. All pass: cargo check, tsc, vite build, vitest (31 tests).
 
 ---
 

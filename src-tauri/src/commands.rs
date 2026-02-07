@@ -18,15 +18,20 @@ pub struct Workspace {
     pub collections: Vec<db::collections::Collection>,
     pub folders: Vec<db::folders::Folder>,
     pub requests: Vec<db::requests::SavedRequest>,
+    pub environments: Vec<db::environments::Environment>,
+    pub active_environment_id: Option<String>,
 }
 
 #[tauri::command]
 pub fn load_workspace(db: tauri::State<'_, AppDb>) -> Result<Workspace, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let active_environment_id = db::settings::get(&conn, "active_environment_id")?;
     Ok(Workspace {
         collections: db::collections::get_all(&conn)?,
         folders: db::folders::get_all(&conn)?,
         requests: db::requests::get_all(&conn)?,
+        environments: db::environments::get_all(&conn)?,
+        active_environment_id,
     })
 }
 
@@ -142,6 +147,65 @@ pub fn move_request(
     db::requests::move_request(&conn, &id, folder_id.as_deref(), &collection_id)
 }
 
+// ── Environments ──
+
+#[tauri::command]
+pub fn load_environments(
+    db: tauri::State<'_, AppDb>,
+) -> Result<Vec<db::environments::Environment>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::environments::get_all(&conn)
+}
+
+#[tauri::command]
+pub fn create_environment(
+    db: tauri::State<'_, AppDb>,
+    name: String,
+) -> Result<db::environments::Environment, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::environments::create(&conn, &name)
+}
+
+#[tauri::command]
+pub fn update_environment(
+    db: tauri::State<'_, AppDb>,
+    id: String,
+    data: db::environments::UpdateEnvironment,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::environments::update(&conn, &id, &data)
+}
+
+#[tauri::command]
+pub fn delete_environment(
+    db: tauri::State<'_, AppDb>,
+    id: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::environments::delete(&conn, &id)
+}
+
+// ── Settings ──
+
+#[tauri::command]
+pub fn get_setting(
+    db: tauri::State<'_, AppDb>,
+    key: String,
+) -> Result<Option<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::settings::get(&conn, &key)
+}
+
+#[tauri::command]
+pub fn set_setting(
+    db: tauri::State<'_, AppDb>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::settings::set(&conn, &key, &value)
+}
+
 // ── Reorder ──
 
 #[derive(Debug, Deserialize)]
@@ -157,7 +221,7 @@ pub fn reorder_items(
     table: String,
 ) -> Result<(), String> {
     let table_name = match table.as_str() {
-        "collections" | "folders" | "requests" => table.as_str(),
+        "collections" | "folders" | "requests" | "environments" => table.as_str(),
         _ => return Err(format!("Invalid table name: {}", table)),
     };
 

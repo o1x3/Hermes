@@ -10,6 +10,7 @@ pub struct Folder {
     pub name: String,
     pub default_headers: String,
     pub default_auth: String,
+    pub variables: String,
     pub sort_order: i32,
     pub created_at: String,
 }
@@ -17,7 +18,7 @@ pub struct Folder {
 pub fn get_all(conn: &Connection) -> Result<Vec<Folder>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, collection_id, parent_folder_id, name, default_headers, default_auth, sort_order, created_at
+            "SELECT id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, created_at
              FROM folders ORDER BY sort_order, created_at",
         )
         .map_err(|e| e.to_string())?;
@@ -31,8 +32,9 @@ pub fn get_all(conn: &Connection) -> Result<Vec<Folder>, String> {
                 name: row.get(3)?,
                 default_headers: row.get(4)?,
                 default_auth: row.get(5)?,
-                sort_order: row.get(6)?,
-                created_at: row.get(7)?,
+                variables: row.get(6)?,
+                sort_order: row.get(7)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -66,7 +68,7 @@ pub fn create(
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Folder, String> {
     conn.query_row(
-        "SELECT id, collection_id, parent_folder_id, name, default_headers, default_auth, sort_order, created_at
+        "SELECT id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, created_at
          FROM folders WHERE id = ?1",
         params![id],
         |row| {
@@ -77,8 +79,9 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Folder, String> {
                 name: row.get(3)?,
                 default_headers: row.get(4)?,
                 default_auth: row.get(5)?,
-                sort_order: row.get(6)?,
-                created_at: row.get(7)?,
+                variables: row.get(6)?,
+                sort_order: row.get(7)?,
+                created_at: row.get(8)?,
             })
         },
     )
@@ -90,6 +93,7 @@ pub struct UpdateFolder {
     pub name: Option<String>,
     pub default_headers: Option<String>,
     pub default_auth: Option<String>,
+    pub variables: Option<String>,
 }
 
 pub fn update(conn: &Connection, id: &str, data: &UpdateFolder) -> Result<(), String> {
@@ -107,6 +111,10 @@ pub fn update(conn: &Connection, id: &str, data: &UpdateFolder) -> Result<(), St
     if let Some(ref auth) = data.default_auth {
         sets.push(format!("default_auth = ?{}", values.len() + 1));
         values.push(Box::new(auth.clone()));
+    }
+    if let Some(ref variables) = data.variables {
+        sets.push(format!("variables = ?{}", values.len() + 1));
+        values.push(Box::new(variables.clone()));
     }
 
     if sets.is_empty() {

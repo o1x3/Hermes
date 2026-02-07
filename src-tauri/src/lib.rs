@@ -34,6 +34,12 @@ pub fn run() {
             commands::duplicate_request,
             commands::move_request,
             commands::reorder_items,
+            commands::load_environments,
+            commands::create_environment,
+            commands::update_environment,
+            commands::delete_environment,
+            commands::get_setting,
+            commands::set_setting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

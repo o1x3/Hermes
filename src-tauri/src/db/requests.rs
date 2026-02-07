@@ -14,6 +14,7 @@ pub struct SavedRequest {
     pub params: String,
     pub body: String,
     pub auth: String,
+    pub variables: String,
     pub sort_order: i32,
     pub updated_at: String,
     pub created_at: String,
@@ -31,14 +32,15 @@ fn row_to_request(row: &rusqlite::Row) -> rusqlite::Result<SavedRequest> {
         params: row.get(7)?,
         body: row.get(8)?,
         auth: row.get(9)?,
-        sort_order: row.get(10)?,
-        updated_at: row.get(11)?,
-        created_at: row.get(12)?,
+        variables: row.get(10)?,
+        sort_order: row.get(11)?,
+        updated_at: row.get(12)?,
+        created_at: row.get(13)?,
     })
 }
 
 const SELECT_COLS: &str =
-    "id, collection_id, folder_id, name, method, url, headers, params, body, auth, sort_order, updated_at, created_at";
+    "id, collection_id, folder_id, name, method, url, headers, params, body, auth, variables, sort_order, updated_at, created_at";
 
 pub fn get_all(conn: &Connection) -> Result<Vec<SavedRequest>, String> {
     let mut stmt = conn
@@ -118,6 +120,7 @@ pub struct UpdateRequest {
     pub params: Option<String>,
     pub body: Option<String>,
     pub auth: Option<String>,
+    pub variables: Option<String>,
 }
 
 pub fn update(conn: &Connection, id: &str, data: &UpdateRequest) -> Result<(), String> {
@@ -140,6 +143,7 @@ pub fn update(conn: &Connection, id: &str, data: &UpdateRequest) -> Result<(), S
     add_field!(data.params, "params");
     add_field!(data.body, "body");
     add_field!(data.auth, "auth");
+    add_field!(data.variables, "variables");
 
     let sql = format!(
         "UPDATE requests SET {} WHERE id = ?{}",

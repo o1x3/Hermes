@@ -31,6 +31,8 @@ vi.mock("@tauri-apps/api/core", () => ({
         collections: [],
         folders: [],
         requests: [],
+        environments: [],
+        active_environment_id: null,
       });
     }
     return Promise.resolve(null);

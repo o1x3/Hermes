@@ -15,6 +15,7 @@ import {
   serializeBody,
   injectAuth,
 } from "@/lib/request-utils";
+import { resolveRequest } from "@/lib/variables";
 
 export interface TabRequestState {
   method: HttpMethod;
@@ -97,7 +98,7 @@ interface TabState {
   setParams: (params: ParamEntry[], source?: "params" | "url") => void;
   setBodyConfig: (body: RequestBody) => void;
   setAuth: (auth: RequestAuth) => void;
-  sendRequest: (resolveAuth?: () => RequestAuth) => Promise<void>;
+  sendRequest: (resolveAuth?: () => RequestAuth, variableScope?: Map<string, string>) => Promise<void>;
 
   // Persistence helpers
   linkTabToSaved: (tabId: string, savedRequestId: string, title: string) => void;
@@ -231,11 +232,21 @@ export const useTabStore = create<TabState>((set, get) => ({
     }));
   },
 
-  sendRequest: async (resolveAuth) => {
+  sendRequest: async (resolveAuth, variableScope) => {
     const tab = get().getActiveTab();
     if (!tab) return;
 
-    const { method, url, headers, params, bodyConfig, auth } = tab.state;
+    // Resolve auth first (may come from parent collection/folder)
+    const stateWithAuth = resolveAuth
+      ? { ...tab.state, auth: resolveAuth() }
+      : tab.state;
+
+    // Resolve variables if scope is provided
+    const resolved = variableScope
+      ? resolveRequest(stateWithAuth, variableScope)
+      : stateWithAuth;
+
+    const { method, url, headers, params, bodyConfig, auth } = resolved;
 
     if (!url.trim()) {
       set((s) => ({
@@ -254,10 +265,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     }));
 
     try {
-      // Resolve auth — may come from parent collection/folder
-      const effectiveAuth = resolveAuth ? resolveAuth() : auth;
-
-      const injected = injectAuth(headers, params, effectiveAuth);
+      const injected = injectAuth(headers, params, auth);
       const finalUrl = buildUrlWithParams(url.trim(), injected.params);
       const { body, contentType } = serializeBody(bodyConfig);
 

@@ -2,6 +2,7 @@ import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabStore, type Tab } from "@/stores/tabStore";
 import type { HttpMethod } from "@/types/request";
+import { EnvSwitcher } from "@/components/environments/EnvSwitcher";
 
 const methodDotColor: Record<HttpMethod, string> = {
   GET: "bg-method-get",
@@ -74,7 +75,11 @@ function TabItem({ tab, isActive }: { tab: Tab; isActive: boolean }) {
   );
 }
 
-export function RequestTabs() {
+interface RequestTabsProps {
+  onManageEnvironments?: () => void;
+}
+
+export function RequestTabs({ onManageEnvironments }: RequestTabsProps) {
   const tabs = useTabStore((s) => s.tabs);
   const activeTabId = useTabStore((s) => s.activeTabId);
   const openNewTab = useTabStore((s) => s.openNewTab);
@@ -95,6 +100,13 @@ export function RequestTabs() {
       >
         <Plus className="size-3.5" />
       </button>
+
+      {/* Environment switcher — pushed to the right */}
+      {onManageEnvironments && (
+        <div className="ml-auto flex items-center pr-2">
+          <EnvSwitcher onManageEnvironments={onManageEnvironments} />
+        </div>
+      )}
     </div>
   );
 }

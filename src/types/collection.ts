@@ -5,6 +5,7 @@ import type {
   RequestBody,
   RequestAuth,
 } from "./request";
+import type { Variable } from "./environment";
 
 export interface Collection {
   id: string;
@@ -12,6 +13,7 @@ export interface Collection {
   description: string;
   defaultHeaders: HeaderEntry[];
   defaultAuth: RequestAuth;
+  variables: Variable[];
   sortOrder: number;
   updatedAt: string;
   createdAt: string;
@@ -24,6 +26,7 @@ export interface Folder {
   name: string;
   defaultHeaders: HeaderEntry[];
   defaultAuth: RequestAuth;
+  variables: Variable[];
   sortOrder: number;
   createdAt: string;
 }
@@ -39,6 +42,7 @@ export interface SavedRequest {
   params: ParamEntry[];
   body: RequestBody;
   auth: RequestAuth;
+  variables: Variable[];
   sortOrder: number;
   updatedAt: string;
   createdAt: string;

@@ -7,10 +7,18 @@ import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
 import { CreateCollectionDialog } from "@/components/collections/CreateCollectionDialog";
 import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
+import { EnvEditor } from "@/components/environments/EnvEditor";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
+import { useEnvironmentStore } from "@/stores/environmentStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
 import { useAutoSave } from "@/hooks/useAutoSave";
+import {
+  buildScopeForRequest,
+  buildAttributedScopeForRequest,
+  getFolderChain,
+} from "@/lib/variables";
+import type { VariableCompletionItem } from "@/lib/codemirror/variable-extension";
 import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -54,8 +62,12 @@ function App() {
   const updateSavedSnapshot = useTabStore((s) => s.updateSavedSnapshot);
   const tabs = useTabStore((s) => s.tabs);
 
+  const environments = useEnvironmentStore((s) => s.environments);
+  const activeEnvironmentId = useEnvironmentStore((s) => s.activeEnvironmentId);
+
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
+  const [showEnvEditor, setShowEnvEditor] = useState(false);
 
   // Auto-save dirty tabs that are already persisted
   useAutoSave();
@@ -74,12 +86,71 @@ function App() {
   }, []);
 
   const focusUrl = useCallback(() => {
-    const input = document.querySelector<HTMLInputElement>(
-      '[data-testid="url-input"]',
-    );
-    input?.focus();
-    input?.select();
+    const wrapper = document.querySelector('[data-testid="url-input"]');
+    const cmContent = wrapper?.querySelector<HTMLElement>(".cm-content");
+    cmContent?.focus();
   }, []);
+
+  // Build variable scope for the active tab
+  const variableScopeContext = useMemo(() => {
+    const globalEnv = environments.find((e) => e.isGlobal);
+    const activeEnv = activeEnvironmentId
+      ? environments.find((e) => e.id === activeEnvironmentId)
+      : undefined;
+
+    if (!activeTab) return { scope: new Map<string, string>(), globalEnv, activeEnv };
+
+    const savedReq = activeTab.savedRequestId
+      ? useCollectionStore.getState().getRequest(activeTab.savedRequestId)
+      : undefined;
+
+    const collection = savedReq
+      ? useCollectionStore.getState().getCollection(savedReq.collectionId)
+      : undefined;
+
+    const folderChain = savedReq?.folderId
+      ? getFolderChain(savedReq.folderId, folders)
+      : [];
+
+    const requestVariables = savedReq?.variables ?? [];
+
+    const scope = buildScopeForRequest({
+      globalEnv,
+      activeEnv,
+      collection,
+      folderChain,
+      requestVariables,
+    });
+
+    const attributed = buildAttributedScopeForRequest({
+      globalEnv,
+      activeEnv,
+      collection,
+      folderChain,
+      requestVariables,
+    });
+
+    return { scope, attributed, globalEnv, activeEnv };
+  }, [activeTab, environments, activeEnvironmentId, folders]);
+
+  const isVariableResolved = useCallback(
+    (name: string) => variableScopeContext.scope.has(name),
+    [variableScopeContext.scope],
+  );
+
+  const getVariableItems = useCallback((): VariableCompletionItem[] => {
+    if (!variableScopeContext.attributed) return [];
+    const items: VariableCompletionItem[] = [];
+    for (const [name, attr] of variableScopeContext.attributed) {
+      items.push({
+        name,
+        value: attr.value,
+        source: attr.source,
+        secret: attr.secret,
+      });
+    }
+    return items;
+  }, [variableScopeContext.attributed]);
 
   const handleSend = useCallback(() => {
     const tab = useTabStore.getState().getActiveTab();
@@ -114,8 +185,8 @@ function App() {
       return auth;
     };
 
-    sendRequest(resolveAuth);
-  }, [sendRequest]);
+    sendRequest(resolveAuth, variableScopeContext.scope);
+  }, [sendRequest, variableScopeContext.scope]);
 
   const handleSave = useCallback(async () => {
     const tab = useTabStore.getState().getActiveTab();
@@ -204,7 +275,11 @@ function App() {
             onCreateCollection={() => setShowCreateCollection(true)}
           />
         }
-        tabBar={<RequestTabs />}
+        tabBar={
+          <RequestTabs
+            onManageEnvironments={() => setShowEnvEditor(true)}
+          />
+        }
         urlBar={
           hasActiveTab ? (
             <UrlBar
@@ -214,6 +289,8 @@ function App() {
               onMethodChange={setMethod}
               onUrlChange={setUrl}
               onSend={handleSend}
+              variableItems={getVariableItems}
+              isVariableResolved={isVariableResolved}
             />
           ) : null
         }
@@ -229,6 +306,8 @@ function App() {
               onAuthChange={setAuth}
               onBodyConfigChange={setBodyConfig}
               inheritedAuth={inheritedAuth}
+              variableItems={getVariableItems}
+              isVariableResolved={isVariableResolved}
             />
           ) : null
         }
@@ -253,6 +332,11 @@ function App() {
       <SaveRequestDialog
         open={showSaveRequest}
         onOpenChange={setShowSaveRequest}
+      />
+
+      <EnvEditor
+        open={showEnvEditor}
+        onOpenChange={setShowEnvEditor}
       />
     </>
   );
