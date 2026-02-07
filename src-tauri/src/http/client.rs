@@ -3,7 +3,7 @@ use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Deserialize)]
 pub struct HeaderEntry {
@@ -20,6 +20,13 @@ pub struct HttpRequest {
     pub body: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct HttpConfig {
+    pub timeout_ms: Option<u64>,
+    pub proxy_url: Option<String>,
+    pub verify_ssl: Option<bool>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HttpResponse {
     pub status: u16,
@@ -30,8 +37,29 @@ pub struct HttpResponse {
     pub size_bytes: u64,
 }
 
-pub async fn execute_request(request: HttpRequest) -> Result<HttpResponse, String> {
-    let client = reqwest::Client::builder()
+pub async fn execute_request(
+    request: HttpRequest,
+    config: Option<HttpConfig>,
+) -> Result<HttpResponse, String> {
+    let mut builder = reqwest::Client::builder();
+
+    if let Some(ref cfg) = config {
+        if let Some(timeout_ms) = cfg.timeout_ms {
+            builder = builder.timeout(Duration::from_millis(timeout_ms));
+        }
+        if let Some(ref proxy_url) = cfg.proxy_url {
+            if !proxy_url.is_empty() {
+                let proxy = reqwest::Proxy::all(proxy_url)
+                    .map_err(|e| format!("Invalid proxy URL: {}", e))?;
+                builder = builder.proxy(proxy);
+            }
+        }
+        if let Some(verify_ssl) = cfg.verify_ssl {
+            builder = builder.danger_accept_invalid_certs(!verify_ssl);
+        }
+    }
+
+    let client = builder
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 

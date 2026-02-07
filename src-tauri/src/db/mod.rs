@@ -1,6 +1,7 @@
 pub mod collections;
 pub mod environments;
 pub mod folders;
+pub mod history;
 pub mod requests;
 pub mod settings;
 
@@ -52,6 +53,10 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
 
     if current < 2 {
         migrate_v1(conn)?;
+    }
+
+    if current < 3 {
+        migrate_v2(conn)?;
     }
 
     Ok(())
@@ -148,6 +153,46 @@ fn migrate_v1(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("Migration v1 failed: {}", e))?;
+
+    Ok(())
+}
+
+/// v2: history table for request logging
+fn migrate_v2(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        BEGIN;
+
+        CREATE TABLE IF NOT EXISTS history (
+            id TEXT PRIMARY KEY,
+            method TEXT NOT NULL,
+            url TEXT NOT NULL,
+            headers TEXT NOT NULL DEFAULT '[]',
+            params TEXT NOT NULL DEFAULT '[]',
+            body TEXT NOT NULL DEFAULT '{\"type\":\"none\"}',
+            auth TEXT NOT NULL DEFAULT '{\"type\":\"none\"}',
+            response_status INTEGER,
+            response_status_text TEXT,
+            response_headers TEXT,
+            response_body TEXT,
+            response_time_ms INTEGER,
+            response_size_bytes INTEGER,
+            response_body_truncated INTEGER NOT NULL DEFAULT 0,
+            error TEXT,
+            saved_request_id TEXT,
+            timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_history_timestamp ON history(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_history_method ON history(method);
+        CREATE INDEX IF NOT EXISTS idx_history_url ON history(url);
+
+        INSERT INTO schema_version (version) VALUES (3);
+
+        COMMIT;
+        ",
+    )
+    .map_err(|e| format!("Migration v2 failed: {}", e))?;
 
     Ok(())
 }

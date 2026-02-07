@@ -1,5 +1,5 @@
 use crate::db::{self, AppDb};
-use crate::http::client::{self, HttpRequest};
+use crate::http::client::{self, HttpConfig, HttpRequest};
 use serde::{Deserialize, Serialize};
 
 // ── HTTP ──
@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 #[tauri::command]
 pub async fn send_request(
     request: HttpRequest,
+    config: Option<HttpConfig>,
 ) -> Result<client::HttpResponse, String> {
-    client::execute_request(request).await
+    client::execute_request(request, config).await
 }
 
 // ── Workspace ──
@@ -234,4 +235,66 @@ pub fn reorder_items(
     }
 
     Ok(())
+}
+
+// ── History ──
+
+#[tauri::command]
+pub fn log_history(
+    db: tauri::State<'_, AppDb>,
+    data: db::history::CreateHistoryEntry,
+) -> Result<db::history::HistoryEntry, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::history::create(&conn, &data)
+}
+
+#[tauri::command]
+pub fn get_history_entry(
+    db: tauri::State<'_, AppDb>,
+    id: String,
+) -> Result<db::history::HistoryEntry, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::history::get_by_id(&conn, &id)
+}
+
+#[tauri::command]
+pub fn search_history(
+    db: tauri::State<'_, AppDb>,
+    params: db::history::HistorySearchParams,
+) -> Result<Vec<db::history::HistoryEntry>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::history::search(&conn, &params)
+}
+
+#[tauri::command]
+pub fn delete_history_entry(
+    db: tauri::State<'_, AppDb>,
+    id: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::history::delete(&conn, &id)
+}
+
+#[tauri::command]
+pub fn clear_history(db: tauri::State<'_, AppDb>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::history::clear(&conn)
+}
+
+#[tauri::command]
+pub fn cleanup_old_history(
+    db: tauri::State<'_, AppDb>,
+    retention_days: i32,
+) -> Result<u64, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::history::cleanup_old(&conn, retention_days)
+}
+
+// ── File I/O ──
+
+#[tauri::command]
+pub async fn write_file(path: String, content: String) -> Result<(), String> {
+    tokio::fs::write(&path, content)
+        .await
+        .map_err(|e| format!("Failed to write file: {}", e))
 }
