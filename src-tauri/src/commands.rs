@@ -290,6 +290,205 @@ pub fn cleanup_old_history(
     db::history::cleanup_old(&conn, retention_days)
 }
 
+// ── Sync ──
+
+#[derive(Debug, Serialize)]
+pub struct DirtyRecords {
+    pub collections: Vec<db::collections::Collection>,
+    pub folders: Vec<db::folders::Folder>,
+    pub requests: Vec<db::requests::SavedRequest>,
+}
+
+#[tauri::command]
+pub fn mark_synced(
+    db: tauri::State<'_, AppDb>,
+    table: String,
+    local_id: String,
+    cloud_id: String,
+    team_id: Option<String>,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    match table.as_str() {
+        "collections" => db::collections::mark_synced(
+            &conn,
+            &local_id,
+            &cloud_id,
+            team_id.as_deref().ok_or("team_id required for collections")?,
+        ),
+        "folders" => db::folders::mark_synced(&conn, &local_id, &cloud_id),
+        "requests" => db::requests::mark_synced(&conn, &local_id, &cloud_id),
+        _ => Err(format!("Invalid table: {}", table)),
+    }
+}
+
+#[tauri::command]
+pub fn mark_dirty(
+    db: tauri::State<'_, AppDb>,
+    table: String,
+    local_id: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    match table.as_str() {
+        "collections" => db::collections::mark_dirty(&conn, &local_id),
+        "folders" => db::folders::mark_dirty(&conn, &local_id),
+        "requests" => db::requests::mark_dirty(&conn, &local_id),
+        _ => Err(format!("Invalid table: {}", table)),
+    }
+}
+
+#[tauri::command]
+pub fn get_dirty_records(db: tauri::State<'_, AppDb>) -> Result<DirtyRecords, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    Ok(DirtyRecords {
+        collections: db::collections::get_dirty(&conn)?,
+        folders: db::folders::get_dirty(&conn)?,
+        requests: db::requests::get_dirty(&conn)?,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "table")]
+pub enum UpsertFromCloud {
+    #[serde(rename = "collections")]
+    Collection {
+        cloud_id: String,
+        team_id: String,
+        name: String,
+        description: String,
+        default_headers: String,
+        default_auth: String,
+        variables: String,
+        sort_order: i32,
+    },
+    #[serde(rename = "folders")]
+    Folder {
+        cloud_id: String,
+        collection_id: String,
+        parent_folder_id: Option<String>,
+        name: String,
+        default_headers: String,
+        default_auth: String,
+        variables: String,
+        sort_order: i32,
+    },
+    #[serde(rename = "requests")]
+    Request {
+        cloud_id: String,
+        collection_id: String,
+        folder_id: Option<String>,
+        name: String,
+        method: String,
+        url: String,
+        headers: String,
+        params: String,
+        body: String,
+        auth: String,
+        variables: String,
+        sort_order: i32,
+    },
+}
+
+#[tauri::command]
+pub fn upsert_from_cloud(
+    db: tauri::State<'_, AppDb>,
+    data: UpsertFromCloud,
+) -> Result<String, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    match data {
+        UpsertFromCloud::Collection {
+            cloud_id, team_id, name, description, default_headers, default_auth, variables, sort_order,
+        } => {
+            let c = db::collections::upsert_from_cloud(
+                &conn, &cloud_id, &team_id, &name, &description, &default_headers, &default_auth, &variables, sort_order,
+            )?;
+            Ok(c.id)
+        }
+        UpsertFromCloud::Folder {
+            cloud_id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order,
+        } => {
+            let f = db::folders::upsert_from_cloud(
+                &conn, &cloud_id, &collection_id, parent_folder_id.as_deref(), &name, &default_headers, &default_auth, &variables, sort_order,
+            )?;
+            Ok(f.id)
+        }
+        UpsertFromCloud::Request {
+            cloud_id, collection_id, folder_id, name, method, url, headers, params, body, auth, variables, sort_order,
+        } => {
+            let r = db::requests::upsert_from_cloud(
+                &conn, &cloud_id, &collection_id, folder_id.as_deref(), &name, &method, &url, &headers, &params, &body, &auth, &variables, sort_order,
+            )?;
+            Ok(r.id)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn load_team_workspace(
+    db: tauri::State<'_, AppDb>,
+    team_id: String,
+) -> Result<Workspace, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let collections = db::collections::get_by_team(&conn, &team_id)?;
+    let col_ids: Vec<&str> = collections.iter().map(|c| c.id.as_str()).collect();
+
+    // Filter folders and requests to only those in team collections
+    let all_folders = db::folders::get_all(&conn)?;
+    let all_requests = db::requests::get_all(&conn)?;
+
+    let folders: Vec<_> = all_folders
+        .into_iter()
+        .filter(|f| col_ids.contains(&f.collection_id.as_str()))
+        .collect();
+    let requests: Vec<_> = all_requests
+        .into_iter()
+        .filter(|r| col_ids.contains(&r.collection_id.as_str()))
+        .collect();
+
+    Ok(Workspace {
+        collections,
+        folders,
+        requests,
+        environments: vec![],
+        active_environment_id: None,
+    })
+}
+
+#[tauri::command]
+pub fn get_sync_queue(
+    db: tauri::State<'_, AppDb>,
+    limit: i32,
+) -> Result<Vec<db::sync::SyncQueueEntry>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::sync::get_pending(&conn, limit)
+}
+
+#[tauri::command]
+pub fn remove_sync_queue_entry(
+    db: tauri::State<'_, AppDb>,
+    id: i64,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::sync::remove(&conn, id)
+}
+
+#[tauri::command]
+pub fn hard_delete_synced(
+    db: tauri::State<'_, AppDb>,
+    table: String,
+    local_id: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let sql = match table.as_str() {
+        "collections" => "DELETE FROM collections WHERE id = ?1 AND cloud_id IS NOT NULL",
+        "folders" => "DELETE FROM folders WHERE id = ?1 AND cloud_id IS NOT NULL",
+        "requests" => "DELETE FROM requests WHERE id = ?1 AND cloud_id IS NOT NULL",
+        _ => return Err(format!("Invalid table: {}", table)),
+    };
+    conn.execute(sql, rusqlite::params![local_id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── File I/O ──
 
 #[tauri::command]

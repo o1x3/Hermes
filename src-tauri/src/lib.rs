@@ -47,6 +47,14 @@ pub fn run() {
             commands::delete_history_entry,
             commands::clear_history,
             commands::cleanup_old_history,
+            commands::mark_synced,
+            commands::mark_dirty,
+            commands::get_dirty_records,
+            commands::upsert_from_cloud,
+            commands::load_team_workspace,
+            commands::get_sync_queue,
+            commands::remove_sync_queue_entry,
+            commands::hard_delete_synced,
             commands::write_file,
         ])
         .run(tauri::generate_context!())
