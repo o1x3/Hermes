@@ -1,8 +1,8 @@
 # Product Spec: Hermes
 
-**Version:** 0.3 (Phase 2 Complete)
+**Version:** 0.4 (Phase 3 Complete)
 **Date:** February 6, 2026
-**Status:** Phase 1 + Phase 2 implemented
+**Status:** Phase 1 + Phase 2 + Phase 3 implemented
 
 > *Hermes (Ἑρμῆς) — Greek god of messengers, speed, and communication. The fastest way to talk to your APIs.*
 
@@ -182,7 +182,7 @@
 | **Frontend** | React 19 + TypeScript | Large ecosystem, strong typing |
 | **UI components** | shadcn/ui + Tailwind CSS v4 | Beautiful defaults, accessible, fully customizable, dark mode built-in, CSS-first config |
 | **HTTP engine** | Rust (`reqwest`) via Tauri commands | Full TLS/proxy/cert/redirect control |
-| **Local storage** | SQLite (via `tauri-plugin-sql`) | Fast, file-based, no external DB needed for solo use |
+| **Local storage** | SQLite (via `rusqlite` bundled) | Fast, file-based, no external DB needed for solo use |
 | **Backend / Auth** | Supabase | Auth, Postgres DB, Realtime subscriptions, Row Level Security |
 | **Real-time sync** | Supabase Realtime | Broadcast + Postgres Changes for live collaboration |
 | **State management** | Zustand | Lightweight, minimal boilerplate |
@@ -323,7 +323,7 @@ The app works fully offline for solo use. All requests and collections are store
 
 ---
 
-### Phase 3 — Collections + Local Storage (Weeks 6–8)
+### Phase 3 — Collections + Local Storage (Weeks 6–8) ✅ COMPLETE
 
 **Goal:** Save requests into collections with folders. Persists in SQLite. Close and reopen = everything is there.
 
@@ -357,6 +357,64 @@ The app works fully offline for solo use. All requests and collections are store
 9. Right-click → Duplicate — verify a copy appears
 10. Right-click → Delete — verify it's removed with confirmation
 11. Set collection-level Bearer auth — verify a child request inherits it
+
+**What was implemented:**
+
+Architecture choices:
+- **rusqlite (bundled)** instead of `tauri-plugin-sql` — direct rusqlite with `bundled` feature compiles SQLite from source (no system dependency). All SQL lives in Rust, never in TypeScript. Trade-off: more Rust boilerplate (~13 IPC commands), but type-safe, testable, clean IPC boundary.
+- **shadcn Sidebar component** replaced the `react-resizable-panels` horizontal split for the sidebar. Lost drag-to-resize sidebar width; gained built-in collapse animation, rail, keyboard shortcut (Cmd+B), mobile sheet drawer, and icon-only collapsed mode.
+- **Flat arrays + derived tree** — collectionStore holds flat arrays of collections/folders/requests. Tree structure is computed at render time via `buildTree()`. Simpler state management, no normalized entity store needed.
+- **Tab-per-request model** — tabStore holds array of tabs, each with independent request state. Dirty detection via JSON comparison against a saved snapshot. Tabs can exist for both saved and unsaved requests.
+- **Auto-save with 2s debounce** — only fires for tabs already linked to a saved request. Unsaved tabs require explicit Cmd+S → SaveRequestDialog.
+- **Auth inheritance resolved at send time** — chain: request auth → folder defaultAuth → collection defaultAuth. First non-"none" wins. UI shows "Inheriting X auth from [name]" with click-to-override.
+- **@dnd-kit** for drag-and-drop request reordering. Pointer sensor with 5px activation distance to avoid accidental drags on click.
+
+Rust backend (src-tauri/):
+- `src/db/mod.rs` — AppDb(Mutex<Connection>) managed state, init_db(), WAL + foreign keys pragmas, v1 migration (3 tables)
+- `src/db/collections.rs` — Collection struct, CRUD (get_all, create, get_by_id, update, delete)
+- `src/db/folders.rs` — Folder struct, CRUD with parent_folder_id for nesting
+- `src/db/requests.rs` — SavedRequest struct, CRUD + duplicate + move_request
+- `src/commands.rs` — 14 IPC commands: send_request, load_workspace, 4 collection ops, 3 folder ops, 5 request ops, reorder_items
+- `src/lib.rs` — DB init in setup hook, all commands registered
+- Dependencies: rusqlite 0.31 (bundled), uuid 1 (v4)
+
+Frontend types & utils (src/):
+- `types/collection.ts` — Collection, Folder, SavedRequest, Workspace, TreeNode types
+- `lib/request-utils.ts` — extracted parseQueryParams, buildUrlWithParams, serializeBody, injectAuth from old requestStore
+- `lib/workspace-utils.ts` — parseWorkspace/parseCollection/parseFolder/parseRequest for Rust JSON↔TS bridge, serialize helpers
+- `lib/tree-utils.ts` — buildTree() converts flat arrays to recursive TreeNode[]
+
+Stores:
+- `stores/collectionStore.ts` — Zustand store: flat collections/folders/requests arrays, all CRUD via invoke(), lookup helpers
+- `stores/tabStore.ts` — Zustand store: tabs array, activeTabId, per-tab TabRequestState, dirty detection, sendRequest with auth resolver callback
+- `stores/requestStore.ts` — DELETED (replaced by tabStore + request-utils)
+
+Layout:
+- `components/layout/AppShell.tsx` — SidebarProvider + SidebarInset + vertical ResizablePanelGroup
+- `components/layout/Sidebar.tsx` — shadcn Sidebar with SidebarHeader/Content/Group/Rail, CollectionTree, new collection button
+- `components/layout/RequestTabs.tsx` — browser-style tab bar with method dots, dirty indicators, middle-click close, + button
+
+Collections:
+- `components/collections/CollectionTree.tsx` — recursive tree from flat arrays, CollectionNode/FolderNode/RequestSubNode with context menus and DnD
+- `components/collections/TreeContextMenu.tsx` — ContextMenu wrapper with AlertDialog for delete confirmation, action factories per node type
+- `components/collections/CreateCollectionDialog.tsx` — name input dialog
+- `components/collections/SaveRequestDialog.tsx` — name + collection/folder picker
+- `components/collections/MoveRequestDialog.tsx` — target collection/folder picker
+- `components/collections/RenameInput.tsx` — inline rename with Enter/Escape/blur
+- `components/collections/DraggableTree.tsx` — DndContext/SortableContext/SortableItem wrappers
+
+Hooks:
+- `hooks/useAutoSave.ts` — 2s debounce auto-save for dirty saved tabs
+- `hooks/useKeyboard.ts` — extended with Cmd+S, Cmd+T, Cmd+W, Cmd+Shift+[/]
+
+Auth inheritance:
+- `components/request/AuthEditor.tsx` — added inheritedAuth prop, shows "Inheriting X auth from [name] · Click to override"
+- `components/request/RequestConfigTabs.tsx` — passes inheritedAuth through to AuthEditor
+
+shadcn components added: sidebar, collapsible, context-menu, dialog, alert-dialog, sheet, skeleton
+Dependencies added: @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities
+
+Files: 15 new, 10 modified, 1 deleted. All pass: cargo check, tsc, vite build, vitest.
 
 ---
 
