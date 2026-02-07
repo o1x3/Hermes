@@ -9,6 +9,11 @@ import type {
   RequestBody,
 } from "@/types/request";
 
+interface InheritedAuth {
+  auth: RequestAuth;
+  sourceName: string;
+}
+
 interface RequestConfigTabsProps {
   params: ParamEntry[];
   headers: HeaderEntry[];
@@ -18,6 +23,7 @@ interface RequestConfigTabsProps {
   onHeadersChange: (headers: HeaderEntry[]) => void;
   onAuthChange: (auth: RequestAuth) => void;
   onBodyConfigChange: (body: RequestBody) => void;
+  inheritedAuth?: InheritedAuth | null;
 }
 
 function countActive(entries: { key: string; enabled: boolean }[]): number {
@@ -33,6 +39,7 @@ export function RequestConfigTabs({
   onHeadersChange,
   onAuthChange,
   onBodyConfigChange,
+  inheritedAuth,
 }: RequestConfigTabsProps) {
   const paramCount = countActive(params);
   const headerCount = countActive(headers);
@@ -94,7 +101,7 @@ export function RequestConfigTabs({
       </TabsContent>
 
       <TabsContent value="auth" className="overflow-y-auto p-4">
-        <AuthEditor auth={auth} onChange={onAuthChange} />
+        <AuthEditor auth={auth} onChange={onAuthChange} inheritedAuth={inheritedAuth} />
       </TabsContent>
 
       <TabsContent value="body" className="overflow-y-auto p-4">

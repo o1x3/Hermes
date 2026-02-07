@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
-import { ChevronRight, FolderClosed } from "lucide-react";
+import { ChevronRight, FolderClosed, GripVertical } from "lucide-react";
+import { DraggableTree, SortableItem } from "./DraggableTree";
 import {
   Collapsible,
   CollapsibleContent,
@@ -50,20 +51,27 @@ export function CollectionTree({
 
   const [moveTarget, setMoveTarget] = useState<SavedRequest | null>(null);
 
+  const allRequestIds = useMemo(
+    () => requests.map((r) => r.id),
+    [requests],
+  );
+
   return (
     <>
-      <SidebarMenu>
-        {tree.map((node) => {
-          if (node.type !== "collection") return null;
-          return (
-            <CollectionNode
-              key={node.data.id}
-              node={node}
-              onMoveRequest={setMoveTarget}
-            />
-          );
-        })}
-      </SidebarMenu>
+      <DraggableTree requestIds={allRequestIds} requests={requests}>
+        <SidebarMenu>
+          {tree.map((node) => {
+            if (node.type !== "collection") return null;
+            return (
+              <CollectionNode
+                key={node.data.id}
+                node={node}
+                onMoveRequest={setMoveTarget}
+              />
+            );
+          })}
+        </SidebarMenu>
+      </DraggableTree>
 
       <MoveRequestDialog
         open={!!moveTarget}
@@ -267,34 +275,37 @@ function RequestSubNode({
   });
 
   return (
-    <TreeContextMenuWrapper
-      items={actions}
-      onDelete={() => deleteSavedRequest(node.data.id)}
-      deleteName={node.data.name}
-    >
-      <SidebarMenuSubButton
-        size="sm"
-        isActive={isActive}
-        onClick={() => openSavedRequest(node.data)}
-        className="cursor-pointer"
+    <SortableItem id={node.data.id}>
+      <TreeContextMenuWrapper
+        items={actions}
+        onDelete={() => deleteSavedRequest(node.data.id)}
+        deleteName={node.data.name}
       >
-        <MethodBadge
-          method={node.data.method}
-          className="text-[9px] px-1 py-0 rounded leading-tight"
-        />
-        {renaming ? (
-          <RenameInput
-            value={node.data.name}
-            onSave={(name) => {
-              updateSavedRequest(node.data.id, { name });
-              setRenaming(false);
-            }}
-            onCancel={() => setRenaming(false)}
+        <SidebarMenuSubButton
+          size="sm"
+          isActive={isActive}
+          onClick={() => openSavedRequest(node.data)}
+          className="cursor-pointer"
+        >
+          <GripVertical className="size-3 text-muted-foreground/40 shrink-0 cursor-grab" />
+          <MethodBadge
+            method={node.data.method}
+            className="text-[9px] px-1 py-0 rounded leading-tight"
           />
-        ) : (
-          <span className="truncate">{node.data.name}</span>
-        )}
-      </SidebarMenuSubButton>
-    </TreeContextMenuWrapper>
+          {renaming ? (
+            <RenameInput
+              value={node.data.name}
+              onSave={(name) => {
+                updateSavedRequest(node.data.id, { name });
+                setRenaming(false);
+              }}
+              onCancel={() => setRenaming(false)}
+            />
+          ) : (
+            <span className="truncate">{node.data.name}</span>
+          )}
+        </SidebarMenuSubButton>
+      </TreeContextMenuWrapper>
+    </SortableItem>
   );
 }

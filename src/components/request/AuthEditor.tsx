@@ -12,9 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 import type { RequestAuth } from "@/types/request";
 
+interface InheritedAuth {
+  auth: RequestAuth;
+  sourceName: string;
+}
+
 interface AuthEditorProps {
   auth: RequestAuth;
   onChange: (auth: RequestAuth) => void;
+  inheritedAuth?: InheritedAuth | null;
 }
 
 const AUTH_TYPES = [
@@ -37,7 +43,13 @@ function defaults(type: string): RequestAuth {
   }
 }
 
-export function AuthEditor({ auth, onChange }: AuthEditorProps) {
+const AUTH_TYPE_LABELS: Record<string, string> = {
+  bearer: "Bearer",
+  basic: "Basic",
+  apikey: "API Key",
+};
+
+export function AuthEditor({ auth, onChange, inheritedAuth }: AuthEditorProps) {
   const [showToken, setShowToken] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -63,9 +75,24 @@ export function AuthEditor({ auth, onChange }: AuthEditorProps) {
       </div>
 
       {auth.type === "none" && (
-        <p className="text-xs text-muted-foreground">
-          This request does not use any authentication.
-        </p>
+        inheritedAuth ? (
+          <p className="text-xs text-muted-foreground">
+            Inheriting {AUTH_TYPE_LABELS[inheritedAuth.auth.type] || inheritedAuth.auth.type} auth from{" "}
+            <strong>{inheritedAuth.sourceName}</strong>
+            {" · "}
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => onChange(inheritedAuth.auth)}
+            >
+              Click to override
+            </button>
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            This request does not use any authentication.
+          </p>
+        )
       )}
 
       {auth.type === "bearer" && (

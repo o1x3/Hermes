@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { RequestTabs } from "@/components/layout/RequestTabs";
@@ -160,6 +160,27 @@ function App() {
     setActiveTab(state.tabs[next].id);
   }, [setActiveTab]);
 
+  // Compute inherited auth for UI indicator
+  const inheritedAuth = useMemo(() => {
+    if (!activeTab || activeTab.state.auth.type !== "none" || !activeTab.savedRequestId) {
+      return null;
+    }
+    const req = useCollectionStore.getState().getRequest(activeTab.savedRequestId);
+    if (!req) return null;
+
+    if (req.folderId) {
+      const folder = useCollectionStore.getState().getFolder(req.folderId);
+      if (folder && folder.defaultAuth.type !== "none") {
+        return { auth: folder.defaultAuth, sourceName: folder.name };
+      }
+    }
+    const col = useCollectionStore.getState().getCollection(req.collectionId);
+    if (col && col.defaultAuth.type !== "none") {
+      return { auth: col.defaultAuth, sourceName: col.name };
+    }
+    return null;
+  }, [activeTab, collections, folders]);
+
   useKeyboard({
     onSend: handleSend,
     onFocusUrl: focusUrl,
@@ -207,6 +228,7 @@ function App() {
               onHeadersChange={setHeaders}
               onAuthChange={setAuth}
               onBodyConfigChange={setBodyConfig}
+              inheritedAuth={inheritedAuth}
             />
           ) : null
         }
