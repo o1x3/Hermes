@@ -1,7 +1,8 @@
-import { FolderClosed, Clock, Plus } from "lucide-react";
+import { FolderClosed, Clock, Plus, Settings } from "lucide-react";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupContent,
@@ -25,6 +26,7 @@ interface SidebarProps {
   folders: Folder[];
   requests: SavedRequest[];
   onCreateCollection: () => void;
+  onOpenSettings: () => void;
 }
 
 export function Sidebar({
@@ -32,6 +34,7 @@ export function Sidebar({
   folders,
   requests,
   onCreateCollection,
+  onOpenSettings,
 }: SidebarProps) {
   return (
     <ShadcnSidebar collapsible="icon">
@@ -96,6 +99,22 @@ export function Sidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={onOpenSettings}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Settings className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Settings</TooltipContent>
+        </Tooltip>
+      </SidebarFooter>
 
       <SidebarRail />
     </ShadcnSidebar>

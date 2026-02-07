@@ -8,9 +8,11 @@ import { ResponsePanel } from "@/components/response/ResponsePanel";
 import { CreateCollectionDialog } from "@/components/collections/CreateCollectionDialog";
 import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
 import { EnvEditor } from "@/components/environments/EnvEditor";
+import { SettingsSheet } from "@/components/settings/SettingsSheet";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useEnvironmentStore } from "@/stores/environmentStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import {
@@ -65,17 +67,21 @@ function App() {
   const environments = useEnvironmentStore((s) => s.environments);
   const activeEnvironmentId = useEnvironmentStore((s) => s.activeEnvironmentId);
 
+  const loadSettings = useSettingsStore((s) => s.loadSettings);
+
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
   const [showEnvEditor, setShowEnvEditor] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Auto-save dirty tabs that are already persisted
   useAutoSave();
 
-  // Load workspace on mount
+  // Load workspace and settings on mount
   useEffect(() => {
     loadWorkspace();
-  }, [loadWorkspace]);
+    loadSettings();
+  }, [loadWorkspace, loadSettings]);
 
   // Open a default tab if none exist on initial load
   useEffect(() => {
@@ -273,6 +279,7 @@ function App() {
             folders={folders}
             requests={requests}
             onCreateCollection={() => setShowCreateCollection(true)}
+            onOpenSettings={() => setShowSettings(true)}
           />
         }
         tabBar={
@@ -337,6 +344,11 @@ function App() {
       <EnvEditor
         open={showEnvEditor}
         onOpenChange={setShowEnvEditor}
+      />
+
+      <SettingsSheet
+        open={showSettings}
+        onOpenChange={setShowSettings}
       />
     </>
   );
