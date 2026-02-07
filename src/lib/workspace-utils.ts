@@ -11,6 +11,7 @@ import type {
   HttpMethod,
 } from "@/types/request";
 import type { Variable, Environment } from "@/types/environment";
+import type { HistoryEntry } from "@/types/history";
 
 // Raw shapes from Rust IPC (snake_case, JSON strings for complex fields)
 interface RawCollection {
@@ -158,6 +159,52 @@ export function parseWorkspace(raw: RawWorkspace): ParsedWorkspace {
 }
 
 export { parseCollection, parseFolder, parseRequest, parseEnvironment };
+
+// ── History ──
+
+export interface RawHistoryEntry {
+  id: string;
+  method: string;
+  url: string;
+  headers: string;
+  params: string;
+  body: string;
+  auth: string;
+  response_status: number | null;
+  response_status_text: string | null;
+  response_headers: string | null;
+  response_body: string | null;
+  response_time_ms: number | null;
+  response_size_bytes: number | null;
+  response_body_truncated: boolean;
+  error: string | null;
+  saved_request_id: string | null;
+  timestamp: string;
+}
+
+export function parseHistoryEntry(raw: RawHistoryEntry): HistoryEntry {
+  return {
+    id: raw.id,
+    method: raw.method as HttpMethod,
+    url: raw.url,
+    headers: parseJson<HeaderEntry[]>(raw.headers, []),
+    params: parseJson<ParamEntry[]>(raw.params, []),
+    body: parseJson<RequestBody>(raw.body, { type: "none" }),
+    auth: parseJson<RequestAuth>(raw.auth, { type: "none" }),
+    responseStatus: raw.response_status,
+    responseStatusText: raw.response_status_text,
+    responseHeaders: raw.response_headers
+      ? parseJson<Record<string, string>>(raw.response_headers, {})
+      : null,
+    responseBody: raw.response_body,
+    responseTimeMs: raw.response_time_ms,
+    responseSizeBytes: raw.response_size_bytes,
+    responseBodyTruncated: raw.response_body_truncated,
+    error: raw.error,
+    savedRequestId: raw.saved_request_id,
+    timestamp: raw.timestamp,
+  };
+}
 
 // Serialize typed objects back to JSON strings for Rust IPC
 export function serializeHeaders(headers: HeaderEntry[]): string {

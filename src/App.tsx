@@ -13,6 +13,7 @@ import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useEnvironmentStore } from "@/stores/environmentStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useHistoryStore } from "@/stores/historyStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import {
@@ -21,8 +22,10 @@ import {
   getFolderChain,
 } from "@/lib/variables";
 import type { VariableCompletionItem } from "@/lib/codemirror/variable-extension";
+import { invoke } from "@tauri-apps/api/core";
 import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { HistoryEntry } from "@/types/history";
 
 function EmptyState() {
   const openNewTab = useTabStore((s) => s.openNewTab);
@@ -68,6 +71,7 @@ function App() {
   const activeEnvironmentId = useEnvironmentStore((s) => s.activeEnvironmentId);
 
   const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const loadHistory = useHistoryStore((s) => s.loadRecent);
 
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
@@ -77,11 +81,16 @@ function App() {
   // Auto-save dirty tabs that are already persisted
   useAutoSave();
 
-  // Load workspace and settings on mount
+  // Load workspace, settings, and history on mount
   useEffect(() => {
     loadWorkspace();
     loadSettings();
-  }, [loadWorkspace, loadSettings]);
+    loadHistory();
+
+    // Cleanup old history based on retention setting
+    const { historyRetentionDays } = useSettingsStore.getState();
+    invoke("cleanup_old_history", { retentionDays: historyRetentionDays }).catch(() => {});
+  }, [loadWorkspace, loadSettings, loadHistory]);
 
   // Open a default tab if none exist on initial load
   useEffect(() => {
@@ -89,6 +98,11 @@ function App() {
       openNewTab();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stub: will be replaced with openHistoryEntry in Task 4
+  const handleOpenHistoryEntry = useCallback((_entry: HistoryEntry) => {
+    // Will be implemented with read-only tabs
   }, []);
 
   const focusUrl = useCallback(() => {
@@ -280,6 +294,7 @@ function App() {
             requests={requests}
             onCreateCollection={() => setShowCreateCollection(true)}
             onOpenSettings={() => setShowSettings(true)}
+            onOpenHistoryEntry={handleOpenHistoryEntry}
           />
         }
         tabBar={

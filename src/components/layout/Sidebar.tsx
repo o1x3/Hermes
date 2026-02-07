@@ -13,7 +13,9 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import type { Collection, Folder, SavedRequest } from "@/types/collection";
+import type { HistoryEntry } from "@/types/history";
 import { CollectionTree } from "@/components/collections/CollectionTree";
+import { HistorySidebar } from "@/components/history/HistorySidebar";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -27,6 +29,7 @@ interface SidebarProps {
   requests: SavedRequest[];
   onCreateCollection: () => void;
   onOpenSettings: () => void;
+  onOpenHistoryEntry: (entry: HistoryEntry) => void;
 }
 
 export function Sidebar({
@@ -35,6 +38,7 @@ export function Sidebar({
   requests,
   onCreateCollection,
   onOpenSettings,
+  onOpenHistoryEntry,
 }: SidebarProps) {
   return (
     <ShadcnSidebar collapsible="icon">
@@ -93,9 +97,7 @@ export function Sidebar({
             History
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <p className="text-[11px] text-muted-foreground/40 py-6 text-center">
-              No history yet
-            </p>
+            <HistorySidebar onOpenEntry={onOpenHistoryEntry} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
