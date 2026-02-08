@@ -18,6 +18,9 @@ pub struct SavedRequest {
     pub sort_order: i32,
     pub updated_at: String,
     pub created_at: String,
+    pub cloud_id: Option<String>,
+    pub synced_at: Option<String>,
+    pub dirty: i32,
 }
 
 fn row_to_request(row: &rusqlite::Row) -> rusqlite::Result<SavedRequest> {
@@ -36,11 +39,14 @@ fn row_to_request(row: &rusqlite::Row) -> rusqlite::Result<SavedRequest> {
         sort_order: row.get(11)?,
         updated_at: row.get(12)?,
         created_at: row.get(13)?,
+        cloud_id: row.get(14)?,
+        synced_at: row.get(15)?,
+        dirty: row.get::<_, Option<i32>>(16)?.unwrap_or(0),
     })
 }
 
 const SELECT_COLS: &str =
-    "id, collection_id, folder_id, name, method, url, headers, params, body, auth, variables, sort_order, updated_at, created_at";
+    "id, collection_id, folder_id, name, method, url, headers, params, body, auth, variables, sort_order, updated_at, created_at, cloud_id, synced_at, dirty";
 
 pub fn get_all(conn: &Connection) -> Result<Vec<SavedRequest>, String> {
     let mut stmt = conn
@@ -145,6 +151,9 @@ pub fn update(conn: &Connection, id: &str, data: &UpdateRequest) -> Result<(), S
     add_field!(data.auth, "auth");
     add_field!(data.variables, "variables");
 
+    // Auto-mark dirty if this is a synced request
+    sets.push("dirty = CASE WHEN cloud_id IS NOT NULL THEN 1 ELSE dirty END".to_string());
+
     let sql = format!(
         "UPDATE requests SET {} WHERE id = ?{}",
         sets.join(", "),
@@ -208,9 +217,84 @@ pub fn move_request(
     collection_id: &str,
 ) -> Result<(), String> {
     conn.execute(
-        "UPDATE requests SET folder_id = ?1, collection_id = ?2, updated_at = datetime('now') WHERE id = ?3",
+        "UPDATE requests SET folder_id = ?1, collection_id = ?2, updated_at = datetime('now'), dirty = CASE WHEN cloud_id IS NOT NULL THEN 1 ELSE dirty END WHERE id = ?3",
         params![folder_id, collection_id, id],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn get_dirty(conn: &Connection) -> Result<Vec<SavedRequest>, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {} FROM requests WHERE dirty = 1",
+            SELECT_COLS
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| row_to_request(row))
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn mark_synced(conn: &Connection, id: &str, cloud_id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE requests SET cloud_id = ?1, synced_at = datetime('now'), dirty = 0 WHERE id = ?2",
+        params![cloud_id, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn mark_dirty(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE requests SET dirty = 1 WHERE id = ?1 AND cloud_id IS NOT NULL",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn upsert_from_cloud(
+    conn: &Connection,
+    cloud_id: &str,
+    collection_id: &str,
+    folder_id: Option<&str>,
+    name: &str,
+    method: &str,
+    url: &str,
+    headers: &str,
+    params_json: &str,
+    body: &str,
+    auth: &str,
+    variables: &str,
+    sort_order: i32,
+) -> Result<SavedRequest, String> {
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT id FROM requests WHERE cloud_id = ?1",
+            params![cloud_id],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(local_id) = existing {
+        conn.execute(
+            "UPDATE requests SET collection_id = ?1, folder_id = ?2, name = ?3, method = ?4, url = ?5, headers = ?6, params = ?7, body = ?8, auth = ?9, variables = ?10, sort_order = ?11, synced_at = datetime('now'), dirty = 0 WHERE id = ?12",
+            params![collection_id, folder_id, name, method, url, headers, params_json, body, auth, variables, sort_order, local_id],
+        )
+        .map_err(|e| e.to_string())?;
+        get_by_id(conn, &local_id)
+    } else {
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers, params, body, auth, variables, sort_order, cloud_id, synced_at, dirty)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'), 0)",
+            params![id, collection_id, folder_id, name, method, url, headers, params_json, body, auth, variables, sort_order, cloud_id],
+        )
+        .map_err(|e| e.to_string())?;
+        get_by_id(conn, &id)
+    }
 }

@@ -13,30 +13,41 @@ pub struct Folder {
     pub variables: String,
     pub sort_order: i32,
     pub created_at: String,
+    pub cloud_id: Option<String>,
+    pub synced_at: Option<String>,
+    pub dirty: i32,
+}
+
+const SELECT_COLS: &str =
+    "id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, created_at, cloud_id, synced_at, dirty";
+
+fn row_to_folder(row: &rusqlite::Row) -> rusqlite::Result<Folder> {
+    Ok(Folder {
+        id: row.get(0)?,
+        collection_id: row.get(1)?,
+        parent_folder_id: row.get(2)?,
+        name: row.get(3)?,
+        default_headers: row.get(4)?,
+        default_auth: row.get(5)?,
+        variables: row.get(6)?,
+        sort_order: row.get(7)?,
+        created_at: row.get(8)?,
+        cloud_id: row.get(9)?,
+        synced_at: row.get(10)?,
+        dirty: row.get::<_, Option<i32>>(11)?.unwrap_or(0),
+    })
 }
 
 pub fn get_all(conn: &Connection) -> Result<Vec<Folder>, String> {
     let mut stmt = conn
-        .prepare(
-            "SELECT id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, created_at
-             FROM folders ORDER BY sort_order, created_at",
-        )
+        .prepare(&format!(
+            "SELECT {} FROM folders ORDER BY sort_order, created_at",
+            SELECT_COLS
+        ))
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map([], |row| {
-            Ok(Folder {
-                id: row.get(0)?,
-                collection_id: row.get(1)?,
-                parent_folder_id: row.get(2)?,
-                name: row.get(3)?,
-                default_headers: row.get(4)?,
-                default_auth: row.get(5)?,
-                variables: row.get(6)?,
-                sort_order: row.get(7)?,
-                created_at: row.get(8)?,
-            })
-        })
+        .query_map([], |row| row_to_folder(row))
         .map_err(|e| e.to_string())?;
 
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
@@ -68,24 +79,82 @@ pub fn create(
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Folder, String> {
     conn.query_row(
-        "SELECT id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, created_at
-         FROM folders WHERE id = ?1",
+        &format!("SELECT {} FROM folders WHERE id = ?1", SELECT_COLS),
         params![id],
-        |row| {
-            Ok(Folder {
-                id: row.get(0)?,
-                collection_id: row.get(1)?,
-                parent_folder_id: row.get(2)?,
-                name: row.get(3)?,
-                default_headers: row.get(4)?,
-                default_auth: row.get(5)?,
-                variables: row.get(6)?,
-                sort_order: row.get(7)?,
-                created_at: row.get(8)?,
-            })
-        },
+        |row| row_to_folder(row),
     )
     .map_err(|e| e.to_string())
+}
+
+pub fn get_dirty(conn: &Connection) -> Result<Vec<Folder>, String> {
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {} FROM folders WHERE dirty = 1",
+            SELECT_COLS
+        ))
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| row_to_folder(row))
+        .map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+pub fn mark_synced(conn: &Connection, id: &str, cloud_id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE folders SET cloud_id = ?1, synced_at = datetime('now'), dirty = 0 WHERE id = ?2",
+        params![cloud_id, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn mark_dirty(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE folders SET dirty = 1 WHERE id = ?1 AND cloud_id IS NOT NULL",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn upsert_from_cloud(
+    conn: &Connection,
+    cloud_id: &str,
+    collection_id: &str,
+    parent_folder_id: Option<&str>,
+    name: &str,
+    default_headers: &str,
+    default_auth: &str,
+    variables: &str,
+    sort_order: i32,
+) -> Result<Folder, String> {
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT id FROM folders WHERE cloud_id = ?1",
+            params![cloud_id],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(local_id) = existing {
+        conn.execute(
+            "UPDATE folders SET collection_id = ?1, parent_folder_id = ?2, name = ?3, default_headers = ?4, default_auth = ?5, variables = ?6, sort_order = ?7, synced_at = datetime('now'), dirty = 0 WHERE id = ?8",
+            params![collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, local_id],
+        )
+        .map_err(|e| e.to_string())?;
+        get_by_id(conn, &local_id)
+    } else {
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO folders (id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, cloud_id, synced_at, dirty)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'), 0)",
+            params![id, collection_id, parent_folder_id, name, default_headers, default_auth, variables, sort_order, cloud_id],
+        )
+        .map_err(|e| e.to_string())?;
+        get_by_id(conn, &id)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,6 +189,9 @@ pub fn update(conn: &Connection, id: &str, data: &UpdateFolder) -> Result<(), St
     if sets.is_empty() {
         return Ok(());
     }
+
+    // Auto-mark dirty if this is a synced folder
+    sets.push("dirty = CASE WHEN cloud_id IS NOT NULL THEN 1 ELSE dirty END".to_string());
 
     let sql = format!(
         "UPDATE folders SET {} WHERE id = ?{}",

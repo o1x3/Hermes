@@ -4,6 +4,7 @@ pub mod folders;
 pub mod history;
 pub mod requests;
 pub mod settings;
+pub mod sync;
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -57,6 +58,10 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
 
     if current < 3 {
         migrate_v2(conn)?;
+    }
+
+    if current < 4 {
+        migrate_v3(conn)?;
     }
 
     Ok(())
@@ -193,6 +198,52 @@ fn migrate_v2(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("Migration v2 failed: {}", e))?;
+
+    Ok(())
+}
+
+/// v3: sync metadata for cloud collections + sync queue
+fn migrate_v3(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "
+        BEGIN;
+
+        ALTER TABLE collections ADD COLUMN team_id TEXT DEFAULT NULL;
+        ALTER TABLE collections ADD COLUMN cloud_id TEXT DEFAULT NULL;
+        ALTER TABLE collections ADD COLUMN synced_at TEXT DEFAULT NULL;
+        ALTER TABLE collections ADD COLUMN dirty INTEGER DEFAULT 0;
+
+        ALTER TABLE folders ADD COLUMN cloud_id TEXT DEFAULT NULL;
+        ALTER TABLE folders ADD COLUMN synced_at TEXT DEFAULT NULL;
+        ALTER TABLE folders ADD COLUMN dirty INTEGER DEFAULT 0;
+
+        ALTER TABLE requests ADD COLUMN cloud_id TEXT DEFAULT NULL;
+        ALTER TABLE requests ADD COLUMN synced_at TEXT DEFAULT NULL;
+        ALTER TABLE requests ADD COLUMN dirty INTEGER DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            table_name TEXT NOT NULL,
+            local_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            payload TEXT,
+            queued_at TEXT NOT NULL DEFAULT (datetime('now')),
+            retry_count INTEGER DEFAULT 0,
+            last_error TEXT
+        );
+
+        CREATE INDEX idx_collections_team ON collections(team_id) WHERE team_id IS NOT NULL;
+        CREATE INDEX idx_collections_cloud ON collections(cloud_id) WHERE cloud_id IS NOT NULL;
+        CREATE INDEX idx_folders_cloud ON folders(cloud_id) WHERE cloud_id IS NOT NULL;
+        CREATE INDEX idx_requests_cloud ON requests(cloud_id) WHERE cloud_id IS NOT NULL;
+        CREATE INDEX idx_sync_queue_pending ON sync_queue(table_name, local_id);
+
+        INSERT INTO schema_version (version) VALUES (4);
+
+        COMMIT;
+        ",
+    )
+    .map_err(|e| format!("Migration v3 failed: {}", e))?;
 
     Ok(())
 }
