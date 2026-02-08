@@ -17,6 +17,10 @@ export interface Collection {
   sortOrder: number;
   updatedAt: string;
   createdAt: string;
+  teamId: string | null;
+  cloudId: string | null;
+  syncedAt: string | null;
+  dirty: number;
 }
 
 export interface Folder {
@@ -29,6 +33,9 @@ export interface Folder {
   variables: Variable[];
   sortOrder: number;
   createdAt: string;
+  cloudId: string | null;
+  syncedAt: string | null;
+  dirty: number;
 }
 
 export interface SavedRequest {
@@ -46,6 +53,9 @@ export interface SavedRequest {
   sortOrder: number;
   updatedAt: string;
   createdAt: string;
+  cloudId: string | null;
+  syncedAt: string | null;
+  dirty: number;
 }
 
 export interface Workspace {

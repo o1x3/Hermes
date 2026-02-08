@@ -24,6 +24,10 @@ interface RawCollection {
   sort_order: number;
   updated_at: string;
   created_at: string;
+  team_id: string | null;
+  cloud_id: string | null;
+  synced_at: string | null;
+  dirty: number;
 }
 
 interface RawFolder {
@@ -36,6 +40,9 @@ interface RawFolder {
   variables: string;
   sort_order: number;
   created_at: string;
+  cloud_id: string | null;
+  synced_at: string | null;
+  dirty: number;
 }
 
 interface RawRequest {
@@ -53,6 +60,9 @@ interface RawRequest {
   sort_order: number;
   updated_at: string;
   created_at: string;
+  cloud_id: string | null;
+  synced_at: string | null;
+  dirty: number;
 }
 
 interface RawEnvironment {
@@ -92,6 +102,10 @@ function parseCollection(raw: RawCollection): Collection {
     sortOrder: raw.sort_order,
     updatedAt: raw.updated_at,
     createdAt: raw.created_at,
+    teamId: raw.team_id ?? null,
+    cloudId: raw.cloud_id ?? null,
+    syncedAt: raw.synced_at ?? null,
+    dirty: raw.dirty ?? 0,
   };
 }
 
@@ -106,6 +120,9 @@ function parseFolder(raw: RawFolder): Folder {
     variables: parseJson<Variable[]>(raw.variables, []),
     sortOrder: raw.sort_order,
     createdAt: raw.created_at,
+    cloudId: raw.cloud_id ?? null,
+    syncedAt: raw.synced_at ?? null,
+    dirty: raw.dirty ?? 0,
   };
 }
 
@@ -125,6 +142,9 @@ function parseRequest(raw: RawRequest): SavedRequest {
     sortOrder: raw.sort_order,
     updatedAt: raw.updated_at,
     createdAt: raw.created_at,
+    cloudId: raw.cloud_id ?? null,
+    syncedAt: raw.synced_at ?? null,
+    dirty: raw.dirty ?? 0,
   };
 }
 

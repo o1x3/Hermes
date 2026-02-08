@@ -31,8 +31,8 @@ interface CollectionState {
   createFolder: (collectionId: string, name: string, parentFolderId?: string) => Promise<Folder>;
   updateFolder: (id: string, updates: Partial<Pick<Folder, "name" | "defaultHeaders" | "defaultAuth" | "variables">>) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
-  saveRequest: (data: Omit<SavedRequest, "id" | "sortOrder" | "updatedAt" | "createdAt">) => Promise<SavedRequest>;
-  updateSavedRequest: (id: string, data: Partial<Omit<SavedRequest, "id" | "collectionId" | "sortOrder" | "updatedAt" | "createdAt">>) => Promise<void>;
+  saveRequest: (data: Omit<SavedRequest, "id" | "sortOrder" | "updatedAt" | "createdAt" | "cloudId" | "syncedAt" | "dirty">) => Promise<SavedRequest>;
+  updateSavedRequest: (id: string, data: Partial<Omit<SavedRequest, "id" | "collectionId" | "sortOrder" | "updatedAt" | "createdAt" | "cloudId" | "syncedAt" | "dirty">>) => Promise<void>;
   deleteSavedRequest: (id: string) => Promise<void>;
   duplicateRequest: (id: string) => Promise<SavedRequest>;
   moveRequest: (id: string, folderId: string | null, collectionId: string) => Promise<void>;
@@ -42,6 +42,8 @@ interface CollectionState {
   getCollection: (id: string) => Collection | undefined;
   getFolder: (id: string) => Folder | undefined;
   getRequest: (id: string) => SavedRequest | undefined;
+  getPersonalCollections: () => Collection[];
+  getTeamCollections: (teamId: string) => Collection[];
 }
 
 export const useCollectionStore = create<CollectionState>((set, get) => ({
@@ -247,4 +249,6 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   getCollection: (id) => get().collections.find((c) => c.id === id),
   getFolder: (id) => get().folders.find((f) => f.id === id),
   getRequest: (id) => get().requests.find((r) => r.id === id),
+  getPersonalCollections: () => get().collections.filter((c) => c.teamId === null),
+  getTeamCollections: (teamId) => get().collections.filter((c) => c.teamId === teamId),
 }));

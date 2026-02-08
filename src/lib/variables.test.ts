@@ -275,9 +275,9 @@ describe("resolveRequest", () => {
 
 describe("getFolderChain", () => {
   const folders: Folder[] = [
-    { id: "root", collectionId: "c1", parentFolderId: null, name: "Root", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [], sortOrder: 0, createdAt: "" },
-    { id: "mid", collectionId: "c1", parentFolderId: "root", name: "Mid", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [], sortOrder: 0, createdAt: "" },
-    { id: "leaf", collectionId: "c1", parentFolderId: "mid", name: "Leaf", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [], sortOrder: 0, createdAt: "" },
+    { id: "root", collectionId: "c1", parentFolderId: null, name: "Root", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [], sortOrder: 0, createdAt: "", cloudId: null, syncedAt: null, dirty: 0 },
+    { id: "mid", collectionId: "c1", parentFolderId: "root", name: "Mid", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [], sortOrder: 0, createdAt: "", cloudId: null, syncedAt: null, dirty: 0 },
+    { id: "leaf", collectionId: "c1", parentFolderId: "mid", name: "Leaf", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [], sortOrder: 0, createdAt: "", cloudId: null, syncedAt: null, dirty: 0 },
   ];
 
   it("returns root → leaf order", () => {
@@ -304,9 +304,9 @@ describe("buildScopeForRequest", () => {
     const scope = buildScopeForRequest({
       globalEnv: { id: "global", name: "Global", variables: [{ key: "a", value: "global" }, { key: "g", value: "only-global" }], isGlobal: true, sortOrder: 0, updatedAt: "", createdAt: "" },
       activeEnv: { id: "dev", name: "Dev", variables: [{ key: "a", value: "dev" }, { key: "e", value: "only-env" }], isGlobal: false, sortOrder: 1, updatedAt: "", createdAt: "" },
-      collection: { id: "c1", name: "API", description: "", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [{ key: "a", value: "collection" }], sortOrder: 0, updatedAt: "", createdAt: "" },
+      collection: { id: "c1", name: "API", description: "", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [{ key: "a", value: "collection" }], sortOrder: 0, updatedAt: "", createdAt: "", teamId: null, cloudId: null, syncedAt: null, dirty: 0 },
       folderChain: [
-        { id: "f1", collectionId: "c1", parentFolderId: null, name: "Users", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [{ key: "a", value: "folder" }], sortOrder: 0, createdAt: "" },
+        { id: "f1", collectionId: "c1", parentFolderId: null, name: "Users", defaultHeaders: [], defaultAuth: { type: "none" }, variables: [{ key: "a", value: "folder" }], sortOrder: 0, createdAt: "", cloudId: null, syncedAt: null, dirty: 0 },
       ],
       requestVariables: [{ key: "a", value: "request" }],
     });
