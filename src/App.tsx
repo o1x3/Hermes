@@ -10,12 +10,20 @@ import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
 import { EnvEditor } from "@/components/environments/EnvEditor";
 import { SettingsSheet } from "@/components/settings/SettingsSheet";
 import { ImportDialog } from "@/components/import/ImportDialog";
+import { AuthDialog } from "@/components/auth/AuthDialog";
+import { CreateTeamDialog } from "@/components/teams/CreateTeamDialog";
+import { InviteDialog } from "@/components/teams/InviteDialog";
+import { MembersList } from "@/components/teams/MembersList";
+import { ShareCollectionDialog } from "@/components/teams/ShareCollectionDialog";
 import { Toaster } from "@/components/ui/sonner";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useEnvironmentStore } from "@/stores/environmentStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useHistoryStore } from "@/stores/historyStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useTeamStore } from "@/stores/teamStore";
+import { useSyncStore } from "@/stores/syncStore";
 import { useKeyboard } from "@/hooks/useKeyboard";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import {
@@ -23,6 +31,8 @@ import {
   buildAttributedScopeForRequest,
   getFolderChain,
 } from "@/lib/variables";
+import { unshareCollection } from "@/lib/sync-utils";
+import { supabase } from "@/lib/supabase";
 import type { VariableCompletionItem } from "@/lib/codemirror/variable-extension";
 import { invoke } from "@tauri-apps/api/core";
 import { Plus, Zap } from "lucide-react";
@@ -79,14 +89,69 @@ function App() {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const loadHistory = useHistoryStore((s) => s.loadRecent);
 
+  // Auth state
+  const user = useAuthStore((s) => s.user);
+  const initialized = useAuthStore((s) => s.initialized);
+  const initializeAuth = useAuthStore((s) => s.initializeAuth);
+
+  // Team state
+  const teams = useTeamStore((s) => s.teams);
+  const activeTeamId = useTeamStore((s) => s.activeTeamId);
+  const loadTeams = useTeamStore((s) => s.loadTeams);
+  const loadPendingInvitations = useTeamStore((s) => s.loadPendingInvitations);
+  const clearTeamData = useTeamStore((s) => s.clearTeamData);
+
+  // Sync state
+  const startSync = useSyncStore((s) => s.startSync);
+  const stopSync = useSyncStore((s) => s.stopSync);
+
+  // Dialog state
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
   const [showEnvEditor, setShowEnvEditor] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const [shareCollectionId, setShareCollectionId] = useState<string | null>(null);
+
+  const isAuthenticated = !!user;
 
   // Auto-save dirty tabs that are already persisted
   useAutoSave();
+
+  // Initialize auth on mount
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
+  // Set up auth state change listener
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session) {
+          await loadTeams();
+          await loadPendingInvitations();
+          startSync();
+        } else if (event === "SIGNED_OUT") {
+          stopSync();
+          clearTeamData();
+        }
+      },
+    );
+    return () => subscription.unsubscribe();
+  }, [loadTeams, loadPendingInvitations, startSync, stopSync, clearTeamData]);
+
+  // Load teams after auth initialization
+  useEffect(() => {
+    if (initialized && user) {
+      loadTeams();
+      loadPendingInvitations();
+      startSync();
+    }
+  }, [initialized, user, loadTeams, loadPendingInvitations, startSync]);
 
   // Load workspace, settings, and history on mount
   useEffect(() => {
@@ -220,7 +285,6 @@ function App() {
     if (!tab) return;
 
     if (tab.savedRequestId) {
-      // Already saved — just persist current state
       const updateReq = useCollectionStore.getState().updateSavedRequest;
       await updateReq(tab.savedRequestId, {
         method: tab.state.method,
@@ -232,7 +296,6 @@ function App() {
       });
       updateSavedSnapshot(tab.id);
     } else {
-      // Not saved yet — show save dialog
       setShowSaveRequest(true);
     }
   }, [updateSavedSnapshot]);
@@ -258,7 +321,6 @@ function App() {
     setActiveTab(state.tabs[next].id);
   }, [setActiveTab]);
 
-  // Compute inherited auth for UI indicator
   const inheritedAuth = useMemo(() => {
     if (!activeTab || activeTab.state.auth.type !== "none" || !activeTab.savedRequestId) {
       return null;
@@ -278,6 +340,15 @@ function App() {
     }
     return null;
   }, [activeTab, collections, folders]);
+
+  const handleUnshareCollection = useCallback(async (collectionId: string) => {
+    try {
+      await unshareCollection(collectionId);
+      toast.success("Collection unshared");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to unshare");
+    }
+  }, []);
 
   useKeyboard({
     onSend: handleSend,
@@ -303,6 +374,13 @@ function App() {
             onOpenSettings={() => setShowSettings(true)}
             onOpenHistoryEntry={handleOpenHistoryEntry}
             onOpenImport={() => setShowImport(true)}
+            isAuthenticated={isAuthenticated}
+            onSignIn={() => setShowAuth(true)}
+            onCreateTeam={() => setShowCreateTeam(true)}
+            activeTeamId={activeTeamId}
+            teams={teams}
+            onShareCollection={(id) => setShareCollectionId(id)}
+            onUnshareCollection={handleUnshareCollection}
           />
         }
         tabBar={
@@ -407,6 +485,44 @@ function App() {
       <ImportDialog
         open={showImport}
         onOpenChange={setShowImport}
+      />
+
+      <AuthDialog
+        open={showAuth}
+        onOpenChange={setShowAuth}
+      />
+
+      <CreateTeamDialog
+        open={showCreateTeam}
+        onOpenChange={setShowCreateTeam}
+      />
+
+      {activeTeamId && (
+        <>
+          <InviteDialog
+            open={showInvite}
+            onOpenChange={setShowInvite}
+            teamId={activeTeamId}
+          />
+
+          <MembersList
+            open={showMembers}
+            onOpenChange={setShowMembers}
+            teamId={activeTeamId}
+            onInvite={() => {
+              setShowMembers(false);
+              setShowInvite(true);
+            }}
+          />
+        </>
+      )}
+
+      <ShareCollectionDialog
+        open={!!shareCollectionId}
+        onOpenChange={(open) => {
+          if (!open) setShareCollectionId(null);
+        }}
+        collectionId={shareCollectionId}
       />
 
       <Toaster />
