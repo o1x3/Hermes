@@ -22,6 +22,8 @@ import {
   Trash2,
   Copy,
   ArrowRightLeft,
+  Download,
+  Terminal,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -111,12 +113,14 @@ export function collectionActions({
   onNewFolder,
   onNewRequest,
   onRename,
+  onExport,
 }: {
   onNewFolder: () => void;
   onNewRequest: () => void;
   onRename: () => void;
+  onExport?: () => void;
 }): ContextAction[] {
-  return [
+  const actions: ContextAction[] = [
     {
       label: "New Folder",
       icon: <FolderPlus className="size-3.5" />,
@@ -133,6 +137,14 @@ export function collectionActions({
       onClick: onRename,
     },
   ];
+  if (onExport) {
+    actions.push({
+      label: "Export as JSON",
+      icon: <Download className="size-3.5" />,
+      onClick: onExport,
+    });
+  }
+  return actions;
 }
 
 export function folderActions({
@@ -167,12 +179,14 @@ export function requestActions({
   onRename,
   onDuplicate,
   onMove,
+  onCopyAsCurl,
 }: {
   onRename: () => void;
   onDuplicate: () => void;
   onMove: () => void;
+  onCopyAsCurl?: () => void;
 }): ContextAction[] {
-  return [
+  const actions: ContextAction[] = [
     {
       label: "Rename",
       icon: <Pencil className="size-3.5" />,
@@ -189,4 +203,12 @@ export function requestActions({
       onClick: onMove,
     },
   ];
+  if (onCopyAsCurl) {
+    actions.push({
+      label: "Copy as cURL",
+      icon: <Terminal className="size-3.5" />,
+      onClick: onCopyAsCurl,
+    });
+  }
+  return actions;
 }

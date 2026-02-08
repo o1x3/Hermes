@@ -35,10 +35,12 @@ export function ResponsePanel({
   response,
   loading,
   error,
+  onCopyAsCurl,
 }: {
   response: HttpResponse | null;
   loading: boolean;
   error: string | null;
+  onCopyAsCurl?: () => void;
 }) {
   const [viewMode, setViewMode] = useState<"pretty" | "raw">("pretty");
   const [searchVisible, setSearchVisible] = useState(false);
@@ -117,6 +119,7 @@ export function ResponsePanel({
                 searchQuery={searchQuery}
                 onSearchQueryChange={setSearchQuery}
                 matchCount={matchCount}
+                onCopyAsCurl={onCopyAsCurl}
               />
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {formatSize(response.size_bytes)} · {response.time_ms}ms

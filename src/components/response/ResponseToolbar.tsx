@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, Code, Braces, Search, X } from "lucide-react";
+import { Copy, Check, Code, Braces, Search, X, Terminal } from "lucide-react";
 
 interface ResponseToolbarProps {
   body: string;
@@ -11,6 +11,7 @@ interface ResponseToolbarProps {
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   matchCount?: number;
+  onCopyAsCurl?: () => void;
 }
 
 export function ResponseToolbar({
@@ -22,6 +23,7 @@ export function ResponseToolbar({
   searchQuery,
   onSearchQueryChange,
   matchCount,
+  onCopyAsCurl,
 }: ResponseToolbarProps) {
   const [copied, setCopied] = useState(false);
 
@@ -83,6 +85,12 @@ export function ResponseToolbar({
           <Braces className="size-3.5" />
         )}
       </Button>
+
+      {onCopyAsCurl && (
+        <Button variant="ghost" size="icon-xs" onClick={onCopyAsCurl} title="Copy as cURL">
+          <Terminal className="size-3.5" />
+        </Button>
+      )}
 
       <Button variant="ghost" size="icon-xs" onClick={handleCopy}>
         {copied ? (

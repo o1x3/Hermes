@@ -26,6 +26,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { HistoryEntry } from "@/types/history";
+import { requestToCurl } from "@/lib/export-utils";
 
 function EmptyState() {
   const openNewTab = useTabStore((s) => s.openNewTab);
@@ -360,6 +361,16 @@ function App() {
               response={activeTab.state.response}
               loading={activeTab.state.loading}
               error={activeTab.state.error}
+              onCopyAsCurl={() => {
+                const curl = requestToCurl(
+                  activeTab.state.method,
+                  activeTab.state.url,
+                  activeTab.state.headers,
+                  activeTab.state.bodyConfig,
+                  activeTab.state.auth,
+                );
+                navigator.clipboard.writeText(curl);
+              }}
             />
           ) : (
             <EmptyState />

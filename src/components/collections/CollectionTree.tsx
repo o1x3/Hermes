@@ -26,6 +26,9 @@ import { MoveRequestDialog } from "./MoveRequestDialog";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { buildTree } from "@/lib/tree-utils";
+import { exportCollectionToJson, requestToCurl } from "@/lib/export-utils";
+import { save } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   Collection,
   Folder,
@@ -116,10 +119,27 @@ function CollectionNode({
     });
   }, [saveRequest, node.data.id]);
 
+  const handleExport = useCallback(async () => {
+    const store = useCollectionStore.getState();
+    const json = exportCollectionToJson(
+      node.data,
+      store.folders,
+      store.requests,
+    );
+    const path = await save({
+      defaultPath: `${node.data.name}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (path) {
+      await invoke("write_file", { path, content: json });
+    }
+  }, [node.data]);
+
   const actions = collectionActions({
     onNewFolder: handleNewFolder,
     onNewRequest: handleNewRequest,
     onRename: () => setRenaming(true),
+    onExport: handleExport,
   });
 
   return (
@@ -270,10 +290,22 @@ function RequestSubNode({
   const deleteSavedRequest = useCollectionStore((s) => s.deleteSavedRequest);
   const duplicateRequest = useCollectionStore((s) => s.duplicateRequest);
 
+  const handleCopyAsCurl = useCallback(async () => {
+    const curl = requestToCurl(
+      node.data.method,
+      node.data.url,
+      node.data.headers,
+      node.data.body,
+      node.data.auth,
+    );
+    await navigator.clipboard.writeText(curl);
+  }, [node.data]);
+
   const actions = requestActions({
     onRename: () => setRenaming(true),
     onDuplicate: () => duplicateRequest(node.data.id),
     onMove: () => onMoveRequest(node.data),
+    onCopyAsCurl: handleCopyAsCurl,
   });
 
   return (
