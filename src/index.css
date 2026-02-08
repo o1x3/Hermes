@@ -207,3 +207,27 @@
   text-decoration: wavy underline;
   text-decoration-color: #ef4444;
 }
+
+/* Custom titlebar drag region */
+.titlebar {
+  -webkit-app-region: drag;
+}
+
+.titlebar button,
+.titlebar [role="button"],
+.titlebar a,
+.titlebar input,
+.titlebar [data-slot="trigger"],
+.titlebar .titlebar-tabs {
+  -webkit-app-region: no-drag;
+}
+
+/* Hide scrollbar on titlebar tabs for cleaner look */
+.titlebar-tabs {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.titlebar-tabs::-webkit-scrollbar {
+  display: none;
+}

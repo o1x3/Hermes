@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { RequestTabs } from "@/components/layout/RequestTabs";
+import { Titlebar } from "@/components/layout/Titlebar";
 import { UrlBar } from "@/components/request/UrlBar";
 import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
@@ -383,9 +383,10 @@ function App() {
             onUnshareCollection={handleUnshareCollection}
           />
         }
-        tabBar={
-          <RequestTabs
+        titlebar={
+          <Titlebar
             onManageEnvironments={() => setShowEnvEditor(true)}
+            onOpenSettings={() => setShowSettings(true)}
           />
         }
         urlBar={

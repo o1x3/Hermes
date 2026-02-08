@@ -87,11 +87,8 @@ export function Sidebar({
 
   return (
     <ShadcnSidebar collapsible="icon">
-      <SidebarHeader className="gap-1">
+      <SidebarHeader className="gap-1 pt-1">
         <div className="flex items-center justify-between">
-          <span className="font-bold text-sidebar-foreground tracking-tight text-sm group-data-[collapsible=icon]:hidden">
-            Hermes
-          </span>
           <SidebarTrigger className="ml-auto" />
         </div>
         {isAuthenticated ? (

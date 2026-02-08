@@ -38,3 +38,13 @@ vi.mock("@tauri-apps/api/core", () => ({
     return Promise.resolve(null);
   }),
 }));
+
+// Mock Tauri window API for custom titlebar
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(() => ({
+    minimize: vi.fn(),
+    toggleMaximize: vi.fn(),
+    close: vi.fn(),
+    isMaximized: vi.fn().mockResolvedValue(false),
+  })),
+}));

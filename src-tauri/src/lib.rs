@@ -18,6 +18,20 @@ pub fn run() {
             let conn =
                 db::init_db(&data_dir).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             app.manage(AppDb(Mutex::new(conn)));
+
+            let window = app.get_webview_window("main").unwrap();
+
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::TitleBarStyle;
+                window.set_title_bar_style(TitleBarStyle::Overlay).ok();
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                window.set_decorations(false).ok();
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
