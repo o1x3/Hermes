@@ -1,0 +1,3354 @@
+
+ ▐▛███▜▌   Claude Code v2.1.34
+▝▜█████▛▘  Opus 4.6 · Claude Max
+  ▘▘ ▝▝    ~/code/work/Hermes
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Plan to implement                                                            │
+│                                                                              │
+│ Phase 5: Request History + Import/Export + Settings                          │
+│                                                                              │
+│ Context                                                                      │
+│                                                                              │
+│ Hermes is at Phase 4 Complete — environments, variables, collections, and    │
+│ the full request/response flow work. Phase 5 adds the four remaining         │
+│ local-only features: request history logging, import from                    │
+│ Postman/cURL/OpenAPI, export as Hermes JSON/cURL, and a settings panel.      │
+│ These are the last features before cloud sync (Phase 6).                     │
+│                                                                              │
+│ What prompted this: The spec defines Phase 5 as Weeks 11-12. History is the  │
+│ most requested feature — users lose their request executions on every        │
+│ session. Import/export unlocks migration from other tools. Settings is       │
+│ table-stakes for any desktop app.                                            │
+│                                                                              │
+│ Intended outcome: Every request execution is logged and searchable. Users    │
+│ can import Postman/cURL/OpenAPI files and export Hermes collections. A       │
+│ settings panel controls theme, history retention, HTTP timeout, proxy, and   │
+│ SSL.                                                                         │
+│                                                                              │
+│ ---                                                                          │
+│ Decisions Made                                                               │
+│ ┌────────────────┬────────────────────────────────┬───────────────────────── │
+│ ─┐                                                                           │
+│ │    Decision    │             Choice             │        Trade-off         │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ Response body  │ Truncate at 1MB                │ Loses data for huge      │
+│  │                                                                           │
+│ │ storage        │                                │ responses; keeps DB lean │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ History detail │                                │ Slightly more complex    │
+│  │                                                                           │
+│ │  view          │ Read-only tab (reuse builder)  │ Tab type vs. simpler     │
+│  │                                                                           │
+│ │                │                                │ modal                    │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ Import parsing │                                │ Faster iteration, no     │
+│  │                                                                           │
+│ │  location      │ TypeScript (not Rust)          │ recompile; won't handle  │
+│  │                                                                           │
+│ │                │                                │ >100MB files             │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ Settings UI    │ Sheet (like EnvEditor)         │ Consistent with existing │
+│  │                                                                           │
+│ │                │                                │  patterns                │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ cURL export    │ Copy to clipboard              │ Nobody saves cURL to     │
+│  │                                                                           │
+│ │                │                                │ files                    │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │                │                                │ CSS already done;        │
+│  │                                                                           │
+│ │ Theme toggle   │ Toggle .dark class on <html>   │ localStorage cache       │
+│  │                                                                           │
+│ │                │                                │ avoids FOUC              │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │                │ @tauri-apps/plugin-dialog for  │ Avoids                   │
+│  │                                                                           │
+│ │ File dialogs   │ export Save As, HTML <input    │ @tauri-apps/plugin-fs    │
+│  │                                                                           │
+│ │                │ type="file"> for import        │ dependency               │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ File writing   │ Custom Rust write_file command │ Avoids adding another    │
+│  │                                                                           │
+│ │ for export     │                                │ Tauri plugin             │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ Toast          │ Add sonner                     │ ~4KB dep, standard for   │
+│  │                                                                           │
+│ │ notifications  │                                │ shadcn apps              │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │                │ Full: JSON + YAML, OpenAPI 3.x │ Adds js-yaml dep         │
+│  │                                                                           │
+│ │ OpenAPI import │  + Swagger 2.0                 │ (~15KB); most            │
+│  │                                                                           │
+│ │                │                                │ feature-rich             │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ History        │ Grouped by date (Today,        │ More UI work than flat   │
+│  │                                                                           │
+│ │ grouping       │ Yesterday, Last 7 Days, Older) │ list; better UX          │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ Import trigger │ Sidebar header button          │ Visible, discoverable    │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ Failed         │                                │ Logs both successes and  │
+│  │                                                                           │
+│ │ requests in    │ Yes, with red error badge      │ failures                 │
+│  │                                                                           │
+│ │ history        │                                │                          │
+│  │                                                                           │
+│ ├────────────────┼────────────────────────────────┼───────────────────────── │
+│ ─┤                                                                           │
+│ │ cURL import    │                                │ No global paste          │
+│  │                                                                           │
+│ │ method         │ Dialog textarea only           │ detection; explicit is   │
+│  │                                                                           │
+│ │                │                                │ safer                    │
+│  │                                                                           │
+│ └────────────────┴────────────────────────────────┴───────────────────────── │
+│ ─┘                                                                           │
+│ ---                                                                          │
+│ New Dependencies                                                             │
+│ Package: tauri-plugin-dialog = "2"                                           │
+│ Purpose: Native file save dialog for export                                  │
+│ Where: src-tauri/Cargo.toml                                                  │
+│ ────────────────────────────────────────                                     │
+│ Package: @tauri-apps/plugin-dialog                                           │
+│ Purpose: JS bindings for save dialog                                         │
+│ Where: package.json                                                          │
+│ ────────────────────────────────────────                                     │
+│ Package: sonner                                                              │
+│ Purpose: Toast notifications                                                 │
+│ Where: package.json                                                          │
+│ ────────────────────────────────────────                                     │
+│ Package: js-yaml                                                             │
+│ Purpose: Parse YAML OpenAPI/Swagger files                                    │
+│ Where: package.json                                                          │
+│ ────────────────────────────────────────                                     │
+│ Package: @types/js-yaml                                                      │
+│ Purpose: TypeScript types for js-yaml                                        │
+│ Where: package.json (dev)                                                    │
+│ No switch UI component needed — use existing Checkbox                        │
+│ (src/components/ui/checkbox.tsx).                                            │
+│                                                                              │
+│ ---                                                                          │
+│ Task Breakdown                                                               │
+│                                                                              │
+│ Each task is a commit-sized unit of work. Commit after each task completes.  │
+│                                                                              │
+│ Task 1: Settings Store + Settings Sheet                                      │
+│                                                                              │
+│ Files to create:                                                             │
+│ - src/stores/settingsStore.ts — Zustand store wrapping existing              │
+│ get_setting/set_setting IPC commands                                         │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - src/App.tsx — Add SettingsSheet state, render gear icon trigger, load      │
+│ settings on mount                                                            │
+│ - src/components/layout/Sidebar.tsx — Add gear icon button in sidebar footer │
+│ - src/main.tsx — Apply theme class before render (read from localStorage     │
+│ cache)                                                                       │
+│ - index.html — Remove hardcoded class="dark" (theme now controlled by JS)    │
+│                                                                              │
+│ Settings schema (keys in settings SQLite table):                             │
+│ - theme → "dark" | "light" | "system" (default: "dark")                      │
+│ - history_retention_days → "30" (default)                                    │
+│ - timeout_ms → "30000" (default)                                             │
+│ - proxy_url → "" (default)                                                   │
+│ - verify_ssl → "true" (default)                                              │
+│                                                                              │
+│ SettingsSheet sections:                                                      │
+│ 1. Appearance: Theme selector (3-button segmented: Dark / Light / System)    │
+│ 2. History: Retention days input + "Clear History" button (disabled until    │
+│ history exists)                                                              │
+│ 3. HTTP Client: Timeout (ms) input, Proxy URL input, SSL verification        │
+│ checkbox                                                                     │
+│                                                                              │
+│ Theme logic:                                                                 │
+│ - On startup: read localStorage.getItem('hermes-theme') synchronously, apply │
+│  .dark class                                                                 │
+│ - On settings load from DB: verify against localStorage cache, update if     │
+│ mismatched                                                                   │
+│ - On theme change: update DB, update localStorage, toggle .dark on           │
+│ document.documentElement                                                     │
+│ - System mode: listen to window.matchMedia('(prefers-color-scheme: dark)')   │
+│ changes                                                                      │
+│                                                                              │
+│ Reuse:                                                                       │
+│ - get_setting/set_setting commands already exist                             │
+│ (src-tauri/src/commands.rs:190-207)                                          │
+│ - settings table already exists (src-tauri/src/db/settings.rs)               │
+│ - Sheet pattern from src/components/environments/EnvEditor.tsx               │
+│ - Checkbox from src/components/ui/checkbox.tsx                               │
+│ - Label from src/components/ui/label.tsx                                     │
+│ - Input from src/components/ui/input.tsx                                     │
+│                                                                              │
+│ Commit: feat(settings): add settings panel with theme, timeout, proxy, SSL,  │
+│ and retention                                                                │
+│                                                                              │
+│ ---                                                                          │
+│ Task 2: History Backend (Rust)                                               │
+│                                                                              │
+│ Files to create:                                                             │
+│ - src-tauri/src/db/history.rs — HistoryEntry struct, CRUD functions, search, │
+│  cleanup                                                                     │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - src-tauri/src/db/mod.rs — Add pub mod history;, add migrate_v2() for       │
+│ history table + indexes                                                      │
+│ - src-tauri/src/commands.rs — Add 6 history commands + write_file command    │
+│ for export                                                                   │
+│ - src-tauri/src/lib.rs — Register all new commands in generate_handler![]    │
+│ - src-tauri/src/http/client.rs — Accept optional HttpConfig for              │
+│ timeout/proxy/SSL                                                            │
+│                                                                              │
+│ Database migration v2:                                                       │
+│ CREATE TABLE IF NOT EXISTS history (                                         │
+│     id TEXT PRIMARY KEY,                                                     │
+│     method TEXT NOT NULL,                                                    │
+│     url TEXT NOT NULL,                                                       │
+│     headers TEXT NOT NULL DEFAULT '[]',                                      │
+│     params TEXT NOT NULL DEFAULT '[]',                                       │
+│     body TEXT NOT NULL DEFAULT '{"type":"none"}',                            │
+│     auth TEXT NOT NULL DEFAULT '{"type":"none"}',                            │
+│     response_status INTEGER,                                                 │
+│     response_status_text TEXT,                                               │
+│     response_headers TEXT,                                                   │
+│     response_body TEXT,                                                      │
+│     response_time_ms INTEGER,                                                │
+│     response_size_bytes INTEGER,                                             │
+│     response_body_truncated INTEGER NOT NULL DEFAULT 0,                      │
+│     error TEXT,                                                              │
+│     saved_request_id TEXT,                                                   │
+│     timestamp TEXT NOT NULL DEFAULT (datetime('now'))                        │
+│ );                                                                           │
+│ CREATE INDEX idx_history_timestamp ON history(timestamp DESC);               │
+│ CREATE INDEX idx_history_method ON history(method);                          │
+│ CREATE INDEX idx_history_url ON history(url);                                │
+│                                                                              │
+│ Rust structs:                                                                │
+│ - HistoryEntry — Serialize, all fields                                       │
+│ - CreateHistoryEntry — Deserialize, used by log_history command              │
+│ - HistorySearchParams — Deserialize, optional filters: query, method,        │
+│ status_min, status_max, from_date, to_date, limit, offset                    │
+│ - HttpConfig — Deserialize, optional: timeout_ms, proxy_url, verify_ssl      │
+│                                                                              │
+│ Body truncation (in db/history.rs):                                          │
+│ const MAX_BODY_BYTES: usize = 1_048_576; // 1MB                              │
+│ Truncate response_body before INSERT. Set response_body_truncated = 1 if     │
+│ truncated.                                                                   │
+│                                                                              │
+│ New IPC commands:                                                            │
+│ - log_history(db, data: CreateHistoryEntry) -> Result<HistoryEntry, String>  │
+│ - get_history_entry(db, id: String) -> Result<HistoryEntry, String>          │
+│ - search_history(db, params: HistorySearchParams) ->                         │
+│ Result<Vec<HistoryEntry>, String>                                            │
+│ - delete_history_entry(db, id: String) -> Result<(), String>                 │
+│ - clear_history(db) -> Result<(), String>                                    │
+│ - cleanup_old_history(db, retention_days: i32) -> Result<u64, String>        │
+│ - write_file(path: String, content: String) -> Result<(), String> — for      │
+│ export                                                                       │
+│                                                                              │
+│ Modify send_request signature:                                               │
+│ pub async fn send_request(request: HttpRequest, config: Option<HttpConfig>)  │
+│ -> Result<HttpResponse, String>                                              │
+│ Apply timeout, proxy, and SSL settings to the reqwest::Client::builder().    │
+│                                                                              │
+│ Reuse patterns from:                                                         │
+│ - src-tauri/src/db/requests.rs — CRUD function patterns, macro for optional  │
+│ field updates                                                                │
+│ - src-tauri/src/db/environments.rs — Simple struct pattern                   │
+│ - src-tauri/src/db/mod.rs — Migration pattern (v0, v1 → add v2)              │
+│                                                                              │
+│ Commit: feat(history): add history database schema, CRUD commands, and HTTP  │
+│ config                                                                       │
+│                                                                              │
+│ ---                                                                          │
+│ Task 3: History Frontend (Store + Sidebar UI)                                │
+│                                                                              │
+│ Files to create:                                                             │
+│ - src/types/history.ts — HistoryEntry TypeScript type                        │
+│ - src/stores/historyStore.ts — Zustand store with loadRecent, logEntry,      │
+│ search, delete, clear                                                        │
+│ - src/components/history/HistorySidebar.tsx — History list with date groups, │
+│  search, filters                                                             │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - src/lib/workspace-utils.ts — Add RawHistoryEntry interface and             │
+│ parseHistoryEntry() function                                                 │
+│ - src/components/layout/Sidebar.tsx — Replace "No history yet" placeholder   │
+│ with <HistorySidebar />                                                      │
+│ - src/App.tsx — Load history on mount, run cleanup                           │
+│                                                                              │
+│ HistoryEntry type (src/types/history.ts):                                    │
+│ export interface HistoryEntry {                                              │
+│   id: string;                                                                │
+│   method: HttpMethod;                                                        │
+│   url: string;                                                               │
+│   headers: HeaderEntry[];                                                    │
+│   params: ParamEntry[];                                                      │
+│   body: RequestBody;                                                         │
+│   auth: RequestAuth;                                                         │
+│   responseStatus: number | null;                                             │
+│   responseStatusText: string | null;                                         │
+│   responseHeaders: Record<string, string> | null;                            │
+│   responseBody: string | null;                                               │
+│   responseTimeMs: number | null;                                             │
+│   responseSizeBytes: number | null;                                          │
+│   responseBodyTruncated: boolean;                                            │
+│   error: string | null;                                                      │
+│   savedRequestId: string | null;                                             │
+│   timestamp: string;                                                         │
+│ }                                                                            │
+│                                                                              │
+│ historyStore actions:                                                        │
+│ - loadRecent() — Fetch last 100 entries on mount                             │
+│ - logEntry(requestData, response, error, savedRequestId) — Insert via        │
+│ log_history IPC                                                              │
+│ - search(filters) — Search with method/status/URL/date filters               │
+│ - deleteEntry(id) — Remove single entry                                      │
+│ - clearAll() — Clear all history                                             │
+│ - Pagination: loadMore() with offset-based pagination                        │
+│                                                                              │
+│ HistorySidebar component structure:                                          │
+│ <SidebarGroup>                                                               │
+│   <SidebarGroupLabel>History</SidebarGroupLabel>                             │
+│   <SidebarGroupContent>                                                      │
+│     <SearchInput />  // Debounced URL search                                 │
+│     <FilterChips />  // Method pills: GET POST PUT DELETE, Status: 2xx 3xx   │
+│ 4xx 5xx                                                                      │
+│     <ScrollArea>                                                             │
+│       <DateGroup label="Today">                                              │
+│         <HistoryItem />  // MethodBadge + truncated URL + status + time      │
+│         <HistoryItem />                                                      │
+│       </DateGroup>                                                           │
+│       <DateGroup label="Yesterday">                                          │
+│         ...                                                                  │
+│       </DateGroup>                                                           │
+│       <DateGroup label="Last 7 Days">                                        │
+│         ...                                                                  │
+│       </DateGroup>                                                           │
+│       <DateGroup label="Older">                                              │
+│         ...                                                                  │
+│       </DateGroup>                                                           │
+│       <LoadMoreButton />                                                     │
+│     </ScrollArea>                                                            │
+│   </SidebarGroupContent>                                                     │
+│ </SidebarGroup>                                                              │
+│                                                                              │
+│ Each HistoryItem shows:                                                      │
+│ - MethodBadge (small) + truncated URL path + status code + response time     │
+│ - For failed requests: red AlertCircle icon instead of status code, error    │
+│ message as tooltip                                                           │
+│ - Clicking opens the entry in a read-only tab via                            │
+│ tabStore.openHistoryEntry() (see Task 4)                                     │
+│                                                                              │
+│ Date grouping logic (pure function):                                         │
+│ function groupByDate(entries: HistoryEntry[]): Map<string, HistoryEntry[]>   │
+│ // Keys: "Today", "Yesterday", "Last 7 Days", "Older"                        │
+│ // Compare entry.timestamp against current date                              │
+│                                                                              │
+│ Reuse:                                                                       │
+│ - MethodBadge from src/components/request/MethodBadge.tsx — Small variant    │
+│ for sidebar                                                                  │
+│ - ScrollArea from src/components/ui/scroll-area.tsx                          │
+│ - Badge from src/components/ui/badge.tsx — Filter chips                      │
+│ - Input from src/components/ui/input.tsx — Search                            │
+│ - Store pattern from src/stores/environmentStore.ts                          │
+│ - Parse pattern from src/lib/workspace-utils.ts                              │
+│                                                                              │
+│ Commit: feat(history): add history store, sidebar with search/filter/date    │
+│ grouping                                                                     │
+│                                                                              │
+│ ---                                                                          │
+│ Task 4: History Integration (Logging + Read-Only Tabs)                       │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - src/stores/tabStore.ts — Add historyEntryId and readOnly to Tab, add       │
+│ openHistoryEntry() and restoreFromHistory(), hook history logging into       │
+│ sendRequest(), pass HTTP config from settings                                │
+│ - src/App.tsx — Add read-only banner above URL bar when viewing history,     │
+│ disable editors                                                              │
+│ - src/components/request/UrlBar.tsx — Add disabled prop                      │
+│ - src/components/request/RequestConfigTabs.tsx — Forward disabled prop to    │
+│ child editors                                                                │
+│ - src/components/request/KeyValueEditor.tsx — Add disabled prop              │
+│ - src/components/request/BodyEditor.tsx — Add disabled prop                  │
+│ - src/components/request/AuthEditor.tsx — Add disabled prop                  │
+│                                                                              │
+│ Tab type extension:                                                          │
+│ export interface Tab {                                                       │
+│   id: string;                                                                │
+│   savedRequestId: string | null;                                             │
+│   historyEntryId: string | null;  // NEW                                     │
+│   readOnly: boolean;              // NEW                                     │
+│   title: string;                                                             │
+│   state: TabRequestState;                                                    │
+│   savedSnapshot: TabRequestState | null;                                     │
+│ }                                                                            │
+│                                                                              │
+│ openHistoryEntry(entry) action:                                              │
+│ - Create new tab with readOnly: true, historyEntryId: entry.id               │
+│ - Populate state from entry data (method, url, headers, params, body, auth)  │
+│ - Set state.response from entry response data (status, headers, body, time,  │
+│ size)                                                                        │
+│ - Title: "[method] /pathname" parsed from URL                                │
+│                                                                              │
+│ restoreFromHistory() action:                                                 │
+│ - Converts active read-only tab to editable                                  │
+│ - Clears historyEntryId, sets readOnly: false                                │
+│ - Title becomes "New Request"                                                │
+│ - Response is preserved but tab is now editable                              │
+│                                                                              │
+│ sendRequest modification:                                                    │
+│ - After response: call useHistoryStore.getState().logEntry(...)              │
+│ (fire-and-forget)                                                            │
+│ - Also log on error (with null response, error message captured)             │
+│ - Guard: don't send from read-only tabs                                      │
+│ - Pass HttpConfig from useSettingsStore.getState() to invoke("send_request", │
+│  { request, config })                                                        │
+│                                                                              │
+│ Read-only banner in App.tsx:                                                 │
+│ {activeTab?.readOnly && (                                                    │
+│   <div className="bg-muted/50 px-4 py-2 flex items-center justify-between    │
+│ text-xs border-b">                                                           │
+│     <span className="text-muted-foreground">                                 │
+│       History entry from {formatRelativeDate(activeTab.state.timestamp)}     │
+│     </span>                                                                  │
+│     <Button size="sm" variant="outline" onClick={restoreFromHistory}>        │
+│       Restore as New Request                                                 │
+│     </Button>                                                                │
+│   </div>                                                                     │
+│ )}                                                                           │
+│                                                                              │
+│ Disabled prop pattern:                                                       │
+│ - UrlBar: make CodeMirror readOnly, hide send button, disable method         │
+│ selector                                                                     │
+│ - KeyValueEditor: disable all inputs, hide add/remove buttons                │
+│ - BodyEditor: make CodeMirror readOnly, disable type selector                │
+│ - AuthEditor: disable all inputs, disable type selector                      │
+│                                                                              │
+│ Commit: feat(history): integrate history logging, read-only tabs, and        │
+│ restore                                                                      │
+│                                                                              │
+│ ---                                                                          │
+│ Task 5: Export (Hermes JSON + cURL)                                          │
+│                                                                              │
+│ Files to create:                                                             │
+│ - src/lib/export-utils.ts — exportCollectionToJson() and requestToCurl()     │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - src-tauri/Cargo.toml — Add tauri-plugin-dialog = "2"                       │
+│ - src-tauri/src/lib.rs — Register .plugin(tauri_plugin_dialog::init())       │
+│ - src-tauri/capabilities/default.json — Add "dialog:default" permission      │
+│ - package.json — Add @tauri-apps/plugin-dialog                               │
+│ - src/components/collections/TreeContextMenu.tsx — Add "Export as JSON" to   │
+│ collectionActions, add "Copy as cURL" to requestActions                      │
+│ - src/components/response/ResponseToolbar.tsx — Add "Copy as cURL" button    │
+│                                                                              │
+│ Hermes JSON format:                                                          │
+│ {                                                                            │
+│   "_hermes": { "version": 1, "exportedAt": "ISO timestamp" },                │
+│   "collection": { ... },                                                     │
+│   "folders": [ ... ],                                                        │
+│   "requests": [ ... ]                                                        │
+│ }                                                                            │
+│                                                                              │
+│ exportCollectionToJson(collection, folders, requests) -> string:             │
+│ - Filter folders and requests by collectionId                                │
+│ - Return JSON.stringify(data, null, 2)                                       │
+│                                                                              │
+│ Export flow:                                                                 │
+│ 1. User right-clicks collection → "Export as JSON"                           │
+│ 2. Call save() from @tauri-apps/plugin-dialog with .json filter              │
+│ 3. If path selected, call invoke("write_file", { path, content })            │
+│ 4. Show success toast via sonner                                             │
+│                                                                              │
+│ requestToCurl(method, url, headers, body) -> string:                         │
+│ - Build cURL command string with -X, -H, -d flags                            │
+│ - Handle body types: raw (with Content-Type), form-data (-F), urlencoded     │
+│ (--data-urlencode)                                                           │
+│ - Properly escape single quotes in header values and body                    │
+│                                                                              │
+│ cURL copy flow:                                                              │
+│ 1. User right-clicks request → "Copy as cURL", OR clicks cURL button in      │
+│ response toolbar                                                             │
+│ 2. Build cURL string from active tab state                                   │
+│ 3. Copy to clipboard via navigator.clipboard.writeText()                     │
+│ 4. Show toast: "Copied cURL to clipboard"                                    │
+│                                                                              │
+│ ResponseToolbar addition: Add a Terminal icon button next to the existing    │
+│ Copy button. On click, build cURL from the active tab's resolved request     │
+│ state (the actual sent request, not the template with variables).            │
+│                                                                              │
+│ Reuse:                                                                       │
+│ - TreeContextMenu ContextAction pattern from                                 │
+│ src/components/collections/TreeContextMenu.tsx                               │
+│ - Copy pattern from ResponseToolbar.tsx:28-32 (clipboard + setCopied         │
+│ timeout)                                                                     │
+│ - serializeBody() from src/lib/request-utils.ts                              │
+│                                                                              │
+│ Commit: feat(export): add Hermes JSON collection export and cURL copy        │
+│                                                                              │
+│ ---                                                                          │
+│ Task 6: Import (Postman + cURL + OpenAPI)                                    │
+│                                                                              │
+│ Files to create:                                                             │
+│ - src/lib/import/postman.ts — Parse Postman Collection v2.1 JSON             │
+│ - src/lib/import/curl.ts — Parse cURL command string                         │
+│ - src/lib/import/openapi.ts — Parse OpenAPI 3.x and Swagger 2.0 (JSON +      │
+│ YAML)                                                                        │
+│ - src/components/import/ImportDialog.tsx — Dialog with 3 tabs                │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - src/components/layout/Sidebar.tsx — Add Import button in Collections       │
+│ header                                                                       │
+│ - src/App.tsx — Add ImportDialog state and render                            │
+│ - package.json — Add js-yaml, @types/js-yaml                                 │
+│                                                                              │
+│ Postman v2.1 parser (src/lib/import/postman.ts):                             │
+│ interface PostmanImport {                                                    │
+│   name: string;                                                              │
+│   description: string;                                                       │
+│   folders: { name: string; parentPath: string[] }[];                         │
+│   requests: {                                                                │
+│     name: string;                                                            │
+│     method: HttpMethod;                                                      │
+│     url: string;                                                             │
+│     headers: HeaderEntry[];                                                  │
+│     params: ParamEntry[];                                                    │
+│     body: RequestBody;                                                       │
+│     auth: RequestAuth;                                                       │
+│     folderPath: string[];                                                    │
+│   }[];                                                                       │
+│ }                                                                            │
+│ export function parsePostmanCollection(json: string): PostmanImport          │
+│                                                                              │
+│ Postman v2.1 structure:                                                      │
+│ - info.name, info.description                                                │
+│ - item[] is recursive — items with request are requests, items with nested   │
+│ item are folders                                                             │
+│ - request.method, request.url.raw, request.url.query[], request.header[]     │
+│ - request.body.mode → map to our body types (raw, formdata, urlencoded)      │
+│ - request.auth.type → map to our auth types (bearer, basic, apikey)          │
+│                                                                              │
+│ cURL parser (src/lib/import/curl.ts):                                        │
+│ export function parseCurl(input: string): {                                  │
+│   method: HttpMethod;                                                        │
+│   url: string;                                                               │
+│   headers: HeaderEntry[];                                                    │
+│   body: RequestBody;                                                         │
+│   auth: RequestAuth;                                                         │
+│ }                                                                            │
+│                                                                              │
+│ Flags to handle:                                                             │
+│ - -X/--request METHOD                                                        │
+│ - -H/--header "Key: Value"                                                   │
+│ - -d/--data/--data-raw/--data-binary BODY                                    │
+│ - -u/--user user:pass (→ basic auth)                                         │
+│ - -b/--cookie → cookie header                                                │
+│ - --compressed (ignore, informational)                                       │
+│ - URL (positional argument, may have quotes)                                 │
+│ - Multiline with \ continuation                                              │
+│ - Strip curl prefix                                                          │
+│                                                                              │
+│ Shell-aware tokenization: handle single-quoted, double-quoted, and           │
+│ backslash-escaped strings. ~150 lines of code, no external deps.             │
+│                                                                              │
+│ OpenAPI parser (src/lib/import/openapi.ts):                                  │
+│ export function parseOpenApi(content: string, format: 'json' | 'yaml'): {    │
+│   title: string;                                                             │
+│   version: string;                                                           │
+│   baseUrl: string;                                                           │
+│   endpoints: {                                                               │
+│     method: HttpMethod;                                                      │
+│     path: string;                                                            │
+│     summary: string;                                                         │
+│     operationId: string;                                                     │
+│     params: ParamEntry[];                                                    │
+│     headers: HeaderEntry[];                                                  │
+│     body: RequestBody;                                                       │
+│   }[];                                                                       │
+│ }                                                                            │
+│                                                                              │
+│ Support matrix:                                                              │
+│ - OpenAPI 3.0/3.1 (openapi: "3.x.x") — paths[path][method], servers[0].url   │
+│ for base URL                                                                 │
+│ - Swagger 2.0 (swagger: "2.0") — paths[path][method], host + basePath for    │
+│ base URL                                                                     │
+│ - Format detection: try JSON.parse() first, if fails try yaml.load()         │
+│ - Version detection: check for openapi key (3.x) or swagger key (2.0)        │
+│ - Parameters: extract in: "query" as params, in: "header" as headers         │
+│ - Request body: for JSON content type, create raw JSON body template from    │
+│ schema (if schema has example)                                               │
+│                                                                              │
+│ ImportDialog component:                                                      │
+│ <Dialog>                                                                     │
+│   <Tabs defaultValue="postman">                                              │
+│     <TabsList>                                                               │
+│       <TabsTrigger value="postman">Postman</TabsTrigger>                     │
+│       <TabsTrigger value="curl">cURL</TabsTrigger>                           │
+│       <TabsTrigger value="openapi">OpenAPI</TabsTrigger>                     │
+│     </TabsList>                                                              │
+│                                                                              │
+│     <TabsContent value="postman">                                            │
+│       <input type="file" accept=".json" />                                   │
+│       <ImportPreview />  // Show collection name, request count              │
+│       <Button>Import Collection</Button>                                     │
+│     </TabsContent>                                                           │
+│                                                                              │
+│     <TabsContent value="curl">                                               │
+│       <Textarea placeholder="Paste cURL command..." />                       │
+│       <ImportPreview />  // Show parsed method + URL                         │
+│       <Button>Import as Request</Button>                                     │
+│     </TabsContent>                                                           │
+│                                                                              │
+│     <TabsContent value="openapi">                                            │
+│       <input type="file" accept=".json,.yaml,.yml" />                        │
+│       <ImportPreview />  // Show API name, endpoint count                    │
+│       <Button>Import as Collection</Button>                                  │
+│     </TabsContent>                                                           │
+│   </Tabs>                                                                    │
+│ </Dialog>                                                                    │
+│                                                                              │
+│ Import flow (Postman/OpenAPI):                                               │
+│ 1. User selects file → read via FileReader API → parse                       │
+│ 2. Show preview (name, count of items)                                       │
+│ 3. On "Import" click:                                                        │
+│   - Call collectionStore.createCollection(name)                              │
+│   - For each folder: call collectionStore.createFolder(collectionId, name,   │
+│ parentId)                                                                    │
+│   - For each request: call collectionStore.createRequest(data)               │
+│ 4. Show success toast with count                                             │
+│                                                                              │
+│ Import flow (cURL):                                                          │
+│ 1. User pastes cURL → auto-parse on change → show preview                    │
+│ 2. On "Import" click: open new tab with parsed request state                 │
+│ 3. Show toast: "Request imported from cURL"                                  │
+│                                                                              │
+│ Reuse:                                                                       │
+│ - collectionStore.createCollection(), createFolder(), createRequest() for    │
+│ persisting                                                                   │
+│ - tabStore.openNewTab() + set state for cURL import                          │
+│ - Dialog/Tabs from src/components/ui/dialog.tsx, src/components/ui/tabs.tsx  │
+│                                                                              │
+│ Commit: feat(import): add Postman, cURL, and OpenAPI import with dialog UI   │
+│                                                                              │
+│ ---                                                                          │
+│ Task 7: Toast Notifications + Polish                                         │
+│                                                                              │
+│ Files to create:                                                             │
+│ - src/components/ui/sonner.tsx — Sonner <Toaster> wrapper styled for Hermes  │
+│ theme                                                                        │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - package.json — Add sonner                                                  │
+│ - src/App.tsx — Add <Toaster /> component at root                            │
+│ - src/components/collections/TreeContextMenu.tsx — Add toast on export       │
+│ success                                                                      │
+│ - src/components/response/ResponseToolbar.tsx — Add toast on cURL copy       │
+│ - src/components/import/ImportDialog.tsx — Add toast on import               │
+│ success/failure                                                              │
+│ - src/stores/historyStore.ts — Add toast on clear history                    │
+│                                                                              │
+│ Sonner setup:                                                                │
+│ import { Toaster } from "sonner";                                            │
+│ // In App.tsx root:                                                          │
+│ <Toaster theme="dark" position="bottom-right" />                             │
+│                                                                              │
+│ Toast calls:                                                                 │
+│ - toast.success("Collection exported") — after export                        │
+│ - toast.success("cURL copied to clipboard") — after cURL copy                │
+│ - toast.success("Imported 12 requests from Postman") — after import          │
+│ - toast.error("Failed to parse file: ...") — on import error                 │
+│ - toast.success("History cleared") — after clear history                     │
+│                                                                              │
+│ Commit: feat(ux): add toast notifications via sonner                         │
+│                                                                              │
+│ ---                                                                          │
+│ Task 8: Update Spec + Final Polish                                           │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - spec.md — Update version to 0.6, set Phase 5 as complete, add              │
+│ implementation notes                                                         │
+│ - CLAUDE.md — Update architecture section with new stores, components, and   │
+│ commands                                                                     │
+│                                                                              │
+│ Spec updates:                                                                │
+│ - Version: 0.6 (Phase 5 Complete)                                            │
+│ - Status line: Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5 implemented   │
+│ - Add implementation notes under Phase 5 section noting any deviations from  │
+│ original spec                                                                │
+│                                                                              │
+│ CLAUDE.md updates:                                                           │
+│ - Add historyStore, settingsStore to stores list                             │
+│ - Add new components to component directory                                  │
+│ - Add new IPC commands                                                       │
+│ - Add sonner, js-yaml, @tauri-apps/plugin-dialog to dependency list          │
+│ - Note the settings table usage for app config                               │
+│                                                                              │
+│ Commit: docs: update spec and CLAUDE.md for Phase 5 completion               │
+│                                                                              │
+│ ---                                                                          │
+│ File Inventory                                                               │
+│                                                                              │
+│ New files (11)                                                               │
+│ File: src/stores/settingsStore.ts                                            │
+│ Purpose: Settings state management                                           │
+│ ────────────────────────────────────────                                     │
+│ File: src/stores/historyStore.ts                                             │
+│ Purpose: History state management                                            │
+│ ────────────────────────────────────────                                     │
+│ File: src/types/history.ts                                                   │
+│ Purpose: HistoryEntry TypeScript type                                        │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/settings/SettingsSheet.tsx                              │
+│ Purpose: Settings panel UI                                                   │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/history/HistorySidebar.tsx                              │
+│ Purpose: History list in sidebar                                             │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/import/ImportDialog.tsx                                 │
+│ Purpose: Import dialog with format tabs                                      │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/ui/sonner.tsx                                           │
+│ Purpose: Sonner toaster wrapper                                              │
+│ ────────────────────────────────────────                                     │
+│ File: src/lib/export-utils.ts                                                │
+│ Purpose: Hermes JSON + cURL export                                           │
+│ ────────────────────────────────────────                                     │
+│ File: src/lib/import/postman.ts                                              │
+│ Purpose: Postman v2.1 parser                                                 │
+│ ────────────────────────────────────────                                     │
+│ File: src/lib/import/curl.ts                                                 │
+│ Purpose: cURL parser                                                         │
+│ ────────────────────────────────────────                                     │
+│ File: src/lib/import/openapi.ts                                              │
+│ Purpose: OpenAPI 3.x + Swagger 2.0 parser                                    │
+│ ────────────────────────────────────────                                     │
+│ File: src-tauri/src/db/history.rs                                            │
+│ Purpose: History DB module                                                   │
+│ Modified files (16)                                                          │
+│ File: src-tauri/src/db/mod.rs                                                │
+│ Changes: Add history module, migrate_v2                                      │
+│ ────────────────────────────────────────                                     │
+│ File: src-tauri/src/commands.rs                                              │
+│ Changes: Add 7 commands (6 history + write_file), update send_request        │
+│ ────────────────────────────────────────                                     │
+│ File: src-tauri/src/lib.rs                                                   │
+│ Changes: Register commands, add dialog plugin                                │
+│ ────────────────────────────────────────                                     │
+│ File: src-tauri/src/http/client.rs                                           │
+│ Changes: Accept HttpConfig (timeout/proxy/SSL)                               │
+│ ────────────────────────────────────────                                     │
+│ File: src-tauri/Cargo.toml                                                   │
+│ Changes: Add tauri-plugin-dialog                                             │
+│ ────────────────────────────────────────                                     │
+│ File: src-tauri/capabilities/default.json                                    │
+│ Changes: Add dialog:default permission                                       │
+│ ────────────────────────────────────────                                     │
+│ File: src/stores/tabStore.ts                                                 │
+│ Changes: readOnly tabs, history logging, HTTP config                         │
+│ ────────────────────────────────────────                                     │
+│ File: src/lib/workspace-utils.ts                                             │
+│ Changes: Add parseHistoryEntry                                               │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/layout/Sidebar.tsx                                      │
+│ Changes: History component, import button, settings button                   │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/collections/TreeContextMenu.tsx                         │
+│ Changes: Export/cURL actions                                                 │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/response/ResponseToolbar.tsx                            │
+│ Changes: cURL copy button                                                    │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/request/UrlBar.tsx                                      │
+│ Changes: disabled prop                                                       │
+│ ────────────────────────────────────────                                     │
+│ File: src/components/request/RequestConfigTabs.tsx                           │
+│ Changes: disabled prop forwarding                                            │
+│ ────────────────────────────────────────                                     │
+│ File: src/App.tsx                                                            │
+│ Changes: Settings, import, history, read-only banner, toaster                │
+│ ────────────────────────────────────────                                     │
+│ File: src/main.tsx                                                           │
+│ Changes: Theme class on startup                                              │
+│ ────────────────────────────────────────                                     │
+│ File: index.html                                                             │
+│ Changes: Remove hardcoded dark class                                         │
+│ ────────────────────────────────────────                                     │
+│ File: package.json                                                           │
+│ Changes: New deps                                                            │
+│ ---                                                                          │
+│ Verification Plan                                                            │
+│                                                                              │
+│ After each task — run:                                                       │
+│                                                                              │
+│ bun run build        # TypeScript check + Vite build (catches type errors)   │
+│ bun run test         # Vitest smoke tests                                    │
+│ cargo check --manifest-path src-tauri/Cargo.toml  # Rust type check          │
+│                                                                              │
+│ After all tasks — full integration test:                                     │
+│                                                                              │
+│ 1. bun run tauri dev — launch app                                            │
+│ 2. Settings: Open settings sheet → toggle theme dark/light/system → verify   │
+│ colors change → set timeout to 5000ms → close                                │
+│ 3. History: Send 5 requests (GET, POST, PUT, DELETE, error) → verify all 5   │
+│ appear in sidebar history grouped by "Today" → search by URL fragment →      │
+│ filter by method → filter by status                                          │
+│ 4. History detail: Click history entry → verify opens in read-only tab →     │
+│ verify all fields show but are disabled → click "Restore as New Request" →   │
+│ verify tab becomes editable                                                  │
+│ 5. Export JSON: Right-click collection → "Export as JSON" → save file → open │
+│  file → verify JSON structure                                                │
+│ 6. Export cURL: Right-click request → "Copy as cURL" → paste in terminal →   │
+│ verify it runs → also test cURL button in response toolbar                   │
+│ 7. Import Postman: Export a collection from Postman → import into Hermes →   │
+│ verify collection/folders/requests created correctly                         │
+│ 8. Import cURL: Paste complex cURL (with headers, body, auth) → verify       │
+│ preview shows correct parsing → import → verify tab populates                │
+│ 9. Import OpenAPI: Import a JSON OpenAPI 3.0 spec → verify endpoints         │
+│ extracted as collection with requests → repeat with YAML file and Swagger    │
+│ 2.0                                                                          │
+│ 10. History cleanup: Set retention to 1 day in settings → restart app →      │
+│ verify old entries cleaned                                                   │
+│ 11. Toasts: Verify toasts appear for: export success, cURL copy, import      │
+│ success, import error, clear history                                         │
+│                                                                              │
+│ Use chrome-devtools MCP:                                                     │
+│                                                                              │
+│ - Navigate to http://localhost:1420                                          │
+│ - Take snapshots to verify UI state                                          │
+│ - Check console for errors                                                   │
+│ - Check network requests for IPC calls                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+⏺ I'll start by reading the key existing files to understand the current
+  codebase before implementing. Let me explore the project structure and
+  critical files in parallel.
+
+⏺ Explore(Explore codebase structure)
+  ⎿  Done (46 tool uses · 114.3k tokens · 2m 45s)
+
+❯ commit after each task without cc attribution 
+
+❯ micro commits 
+
+❯ make tasks 
+
+⏺ Good, I have a thorough understanding of the codebase. Let me create the task
+  list and start implementing. No CC attribution in commits, micro commits
+  throughout.
+
+⏺ Now let me start Task 1. First, let me read the key files I need.
+
+⏺ Read 6 files (ctrl+o to expand)
+
+⏺ Now let me also read the commands.rs and db/settings.rs to understand the
+  existing settings IPC.
+
+⏺ Read 2 files (ctrl+o to expand)
+
+⏺ Good. Now I have everything I need for Task 1. Let me start creating the
+  settings store and SettingsSheet.
+
+⏺ Write(src/stores/settingsStore.ts)
+  ⎿  Wrote 124 lines to src/stores/settingsStore.ts
+       1 import { create } from "zustand";
+       2 import { invoke } from "@tauri-apps/api/core";
+       3 
+       4 export type Theme = "dark" | "light" | "system";
+       5 
+       6 interface Settings {
+       7   theme: Theme;
+       8   historyRetentionDays: number;
+       9   timeoutMs: number;
+      10   proxyUrl: string;
+     … +114 lines (ctrl+o to expand)
+
+⏺ Now the SettingsSheet component.
+
+⏺ Write(src/components/settings/SettingsSheet.tsx)
+  ⎿  Wrote 210 lines to src/components/settings/SettingsSheet.tsx
+       1 import { useCallback, useState } from "react";
+       2 import {
+       3   Sheet,
+       4   SheetContent,
+       5   SheetHeader,
+       6   SheetTitle,
+       7 } from "@/components/ui/sheet";
+       8 import { Button } from "@/components/ui/button";
+       9 import { Input } from "@/components/ui/input";
+      10 import { Label } from "@/components/ui/label";
+     … +200 lines (ctrl+o to expand)
+
+⏺ Now update index.html to remove hardcoded dark class.
+
+⏺ Update(index.html)
+  ⎿  Added 1 line, removed 1 line
+      1  <!doctype html>
+      2 -<html lang="en" class="dark">                                   
+      2 +<html lang="en">                                                
+      3    <head>
+      4      <meta charset="UTF-8" />
+      5      <meta name="viewport" content="width=device-width, initial-s
+         cale=1.0" />
+
+⏺ Now update main.tsx to apply cached theme before render.
+
+⏺ Write(src/main.tsx)
+  ⎿  Added 4 lines
+       2  import ReactDOM from "react-dom/client";
+       3  import "./index.css";
+       4  import App from "./App";
+       5 +import { applyCachedTheme } from "@/stores/settingsStore";     
+       6  
+       7 +// Apply cached theme synchronously before React mounts to avoi
+         +d FOUC                                                         
+       8 +applyCachedTheme();                                            
+       9 +                                                               
+      10  ReactDOM.createRoot(document.getElementById("root")!).render(
+      11    <React.StrictMode>
+      12      <App />
+
+⏺ Now update Sidebar.tsx to add the settings gear icon in the footer.
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      1 -import { FolderClosed, Clock, Plus } from "lucide-react";       
+      1 +import { FolderClosed, Clock, Plus, Settings } from "lucide-reac
+        +t";                                                             
+      2  import {
+      3    Sidebar as ShadcnSidebar,
+      4    SidebarContent,
+      5 +  SidebarFooter,                                                
+      6    SidebarGroup,
+      7    SidebarGroupAction,
+      8    SidebarGroupContent,
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 1 line
+      26    folders: Folder[];
+      27    requests: SavedRequest[];
+      28    onCreateCollection: () => void;
+      29 +  onOpenSettings: () => void;                                  
+      30  }
+      31  
+      32  export function Sidebar({
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 1 line
+      34    folders,
+      35    requests,
+      36    onCreateCollection,
+      37 +  onOpenSettings,                                              
+      38  }: SidebarProps) {
+      39    return (
+      40      <ShadcnSidebar collapsible="icon">
+
+⏺ Now add the settings button and footer to the sidebar:
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 16 lines
+      100          </SidebarGroup>
+      101        </SidebarContent>
+      102  
+      103 +      <SidebarFooter>                                         
+      104 +        <Tooltip>                                             
+      105 +          <TooltipTrigger asChild>                            
+      106 +            <Button                                           
+      107 +              variant="ghost"                                 
+      108 +              size="icon-xs"                                  
+      109 +              onClick={onOpenSettings}                        
+      110 +              className="text-muted-foreground hover:text-fore
+          +ground"                                                       
+      111 +            >                                                 
+      112 +              <Settings className="size-4" />                 
+      113 +            </Button>                                         
+      114 +          </TooltipTrigger>                                   
+      115 +          <TooltipContent side="right">Settings</TooltipConten
+          +t>                                                            
+      116 +        </Tooltip>                                            
+      117 +      </SidebarFooter>                                        
+      118 +                                                              
+      119        <SidebarRail />
+      120      </ShadcnSidebar>
+      121    );
+
+⏺ Now update App.tsx to wire up SettingsSheet and load settings on mount.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+       8  import { CreateCollectionDialog } from "@/components/collection
+          s/CreateCollectionDialog";
+       9  import { SaveRequestDialog } from "@/components/collections/Sav
+          eRequestDialog";
+      10  import { EnvEditor } from "@/components/environments/EnvEditor"
+          ;
+      11 +import { SettingsSheet } from "@/components/settings/SettingsSh
+         +eet";                                                          
+      12  import { useTabStore } from "@/stores/tabStore";
+      13  import { useCollectionStore } from "@/stores/collectionStore";
+      14  import { useEnvironmentStore } from "@/stores/environmentStore"
+          ;
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      12  import { useTabStore } from "@/stores/tabStore";
+      13  import { useCollectionStore } from "@/stores/collectionStore";
+      14  import { useEnvironmentStore } from "@/stores/environmentStore"
+          ;
+      15 +import { useSettingsStore } from "@/stores/settingsStore";     
+      16  import { useKeyboard } from "@/hooks/useKeyboard";
+      17  import { useAutoSave } from "@/hooks/useAutoSave";
+      18  import {
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 3 lines
+      67    const environments = useEnvironmentStore((s) => s.environment
+          s);
+      68    const activeEnvironmentId = useEnvironmentStore((s) => s.acti
+          veEnvironmentId);
+      69  
+      70 +  const loadSettings = useSettingsStore((s) => s.loadSettings);
+      71 +                                                               
+      72    const [showCreateCollection, setShowCreateCollection] = useSt
+          ate(false);
+      73    const [showSaveRequest, setShowSaveRequest] = useState(false)
+          ;
+      74    const [showEnvEditor, setShowEnvEditor] = useState(false);
+      75 +  const [showSettings, setShowSettings] = useState(false);     
+      76  
+      77    // Auto-save dirty tabs that are already persisted
+      78    useAutoSave();
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      77    // Auto-save dirty tabs that are already persisted
+      78    useAutoSave();
+      79  
+      80 -  // Load workspace on mount                                   
+      80 +  // Load workspace and settings on mount                      
+      81    useEffect(() => {
+      82      loadWorkspace();
+      83 -  }, [loadWorkspace]);                                         
+      83 +    loadSettings();                                            
+      84 +  }, [loadWorkspace, loadSettings]);                           
+      85  
+      86    // Open a default tab if none exist on initial load
+      87    useEffect(() => {
+
+⏺ Now wire the settings prop and component into the sidebar and dialog section:
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      279              folders={folders}
+      280              requests={requests}
+      281              onCreateCollection={() => setShowCreateCollection(
+           true)}
+      282 +            onOpenSettings={() => setShowSettings(true)}      
+      283            />
+      284          }
+      285          tabBar={
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 5 lines
+      345          open={showEnvEditor}
+      346          onOpenChange={setShowEnvEditor}
+      347        />
+      348 +                                                              
+      349 +      <SettingsSheet                                          
+      350 +        open={showSettings}                                   
+      351 +        onOpenChange={setShowSettings}                        
+      352 +      />                                                      
+      353      </>
+      354    );
+      355  }
+
+⏺ Let me verify the build works.
+
+⏺ Bash(bun run build 2>&1)
+  ⎿  $ tsc -b && vite build
+     vite v6.4.1 building for production...
+     transforming...
+     … +51 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+⏺ Build passes. Let me also run the tests.
+
+⏺ Bash(bun run test 2>&1)
+  ⎿  $ vitest run
+
+      RUN  v4.0.18 /Users/karthikvinayan/code/work/Hermes
+     … +33 lines (ctrl+o to expand)
+
+⏺ All passing. Now let me fix the dynamic import warning in SettingsSheet.tsx —
+  I should use the static import instead.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/components/settings/SettingsSheet.tsx)
+  ⎿  Added 1 line
+      20    AlertDialogHeader,
+      21    AlertDialogTitle,
+      22  } from "@/components/ui/alert-dialog";
+      23 +import { invoke } from "@tauri-apps/api/core";                 
+      24  import { useSettingsStore, type Theme } from "@/stores/settings
+          Store";
+      25  import { Sun, Moon, Monitor } from "lucide-react";
+      26  
+
+⏺ Update(src/components/settings/SettingsSheet.tsx)
+  ⎿  Removed 1 line
+      52  
+      53    const handleClearHistory = useCallback(async () => {
+      54      try {
+      55 -      const { invoke } = await import("@tauri-apps/api/core"); 
+      55        await invoke("clear_history");
+      56      } catch {
+      57        // History commands may not exist yet
+
+⏺ Now commit Task 1.
+
+⏺ Bash(git add src/stores/settingsStore.ts
+      src/components/settings/SettingsSheet.tsx src/App.tsx
+      src/components/layout/Sidebar.tsx src/main.tsx index.html && git commi…)
+  ⎿  [main ef29877] feat(settings): add settings panel with theme, timeout,
+     proxy, SSL, and retention
+      6 files changed, 371 insertions(+), 4 deletions(-)
+     … +2 lines (ctrl+o to expand)
+
+⏺ Now Task 2: History Backend (Rust). Let me read the existing Rust files I need
+   to modify.
+
+⏺ Read 4 files (ctrl+o to expand)
+
+⏺ Now let me read the Cargo.toml to see exact dependency versions.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now I'll create the history.rs DB module, update mod.rs with migration v2,
+  update commands.rs with new commands, update client.rs with HttpConfig, and
+  update lib.rs.
+
+⏺ Write(src-tauri/src/db/history.rs)
+  ⎿  Wrote 222 lines to src-tauri/src/db/history.rs
+       1 use rusqlite::{params, Connection};
+       2 use serde::{Deserialize, Serialize};
+       3 use uuid::Uuid;
+       4 
+       5 const MAX_BODY_BYTES: usize = 1_048_576; // 1MB
+       6 
+       7 #[derive(Debug, Serialize, Clone)]
+       8 pub struct HistoryEntry {
+       9     pub id: String,
+      10     pub method: String,
+     … +212 lines (ctrl+o to expand)
+
+⏺ Now update db/mod.rs to add history module and migration v2.
+
+⏺ Update(src-tauri/src/db/mod.rs)
+  ⎿  Added 1 line
+      1  pub mod collections;
+      2  pub mod environments;
+      3  pub mod folders;
+      4 +pub mod history;                                                
+      5  pub mod requests;
+      6  pub mod settings;
+      7  
+
+⏺ Update(src-tauri/src/db/mod.rs)
+  ⎿  Added 4 lines
+      55          migrate_v1(conn)?;
+      56      }
+      57  
+      58 +    if current < 3 {                                           
+      59 +        migrate_v2(conn)?;                                     
+      60 +    }                                                          
+      61 +                                                               
+      62      Ok(())
+      63  }
+      64  
+
+⏺ Now add the migrate_v2 function at the end of mod.rs.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src-tauri/src/db/mod.rs)
+  ⎿  Added 40 lines
+      156  
+      157      Ok(())
+      158  }
+      159 +                                                              
+      160 +/// v2: history table for request logging                     
+      161 +fn migrate_v2(conn: &Connection) -> Result<(), String> {      
+      162 +    conn.execute_batch(                                       
+      163 +        "                                                     
+      164 +        BEGIN;                                                
+      165 +                                                              
+      166 +        CREATE TABLE IF NOT EXISTS history (                  
+      167 +            id TEXT PRIMARY KEY,                              
+      168 +            method TEXT NOT NULL,                             
+      169 +            url TEXT NOT NULL,                                
+      170 +            headers TEXT NOT NULL DEFAULT '[]',               
+      171 +            params TEXT NOT NULL DEFAULT '[]',                
+      172 +            body TEXT NOT NULL DEFAULT '{\"type\":\"none\"}', 
+      173 +            auth TEXT NOT NULL DEFAULT '{\"type\":\"none\"}', 
+      174 +            response_status INTEGER,                          
+      175 +            response_status_text TEXT,                        
+      176 +            response_headers TEXT,                            
+      177 +            response_body TEXT,                               
+      178 +            response_time_ms INTEGER,                         
+      179 +            response_size_bytes INTEGER,                      
+      180 +            response_body_truncated INTEGER NOT NULL DEFAULT 0
+          +,                                                             
+      181 +            error TEXT,                                       
+      182 +            saved_request_id TEXT,                            
+      183 +            timestamp TEXT NOT NULL DEFAULT (datetime('now')) 
+      184 +        );                                                    
+      185 +                                                              
+      186 +        CREATE INDEX IF NOT EXISTS idx_history_timestamp ON hi
+          +story(timestamp DESC);                                        
+      187 +        CREATE INDEX IF NOT EXISTS idx_history_method ON histo
+          +ry(method);                                                   
+      188 +        CREATE INDEX IF NOT EXISTS idx_history_url ON history(
+          +url);                                                         
+      189 +                                                              
+      190 +        INSERT INTO schema_version (version) VALUES (3);      
+      191 +                                                              
+      192 +        COMMIT;                                               
+      193 +        ",                                                    
+      194 +    )                                                         
+      195 +    .map_err(|e| format!("Migration v2 failed: {}", e))?;     
+      196 +                                                              
+      197 +    Ok(())                                                    
+      198 +}                                                             
+
+⏺ Now update client.rs to accept HttpConfig.
+
+⏺ Update(src-tauri/src/http/client.rs)
+  ⎿  Added 8 lines, removed 1 line
+      3  use serde::{Deserialize, Serialize};
+      4  use std::collections::HashMap;
+      5  use std::str::FromStr;
+      6 -use std::time::Instant;                                         
+      6 +use std::time::{Duration, Instant};                             
+      7  
+      8  #[derive(Debug, Deserialize)]
+      9  pub struct HeaderEntry {
+     ...
+      20      pub body: Option<String>,
+      21  }
+      22  
+      23 +#[derive(Debug, Deserialize)]                                  
+      24 +pub struct HttpConfig {                                        
+      25 +    pub timeout_ms: Option<u64>,                               
+      26 +    pub proxy_url: Option<String>,                             
+      27 +    pub verify_ssl: Option<bool>,                              
+      28 +}                                                              
+      29 +                                                               
+      30  #[derive(Debug, Serialize)]
+      31  pub struct HttpResponse {
+      32      pub status: u16,
+
+⏺ Update(src-tauri/src/http/client.rs)
+  ⎿  Added 23 lines, removed 2 lines
+      37      pub size_bytes: u64,
+      38  }
+      39  
+      40 -pub async fn execute_request(request: HttpRequest) -> Result<Ht
+         -tpResponse, String> {                                          
+      41 -    let client = reqwest::Client::builder()                    
+      40 +pub async fn execute_request(                                  
+      41 +    request: HttpRequest,                                      
+      42 +    config: Option<HttpConfig>,                                
+      43 +) -> Result<HttpResponse, String> {                            
+      44 +    let mut builder = reqwest::Client::builder();              
+      45 +                                                               
+      46 +    if let Some(ref cfg) = config {                            
+      47 +        if let Some(timeout_ms) = cfg.timeout_ms {             
+      48 +            builder = builder.timeout(Duration::from_millis(tim
+         +eout_ms));                                                     
+      49 +        }                                                      
+      50 +        if let Some(ref proxy_url) = cfg.proxy_url {           
+      51 +            if !proxy_url.is_empty() {                         
+      52 +                let proxy = reqwest::Proxy::all(proxy_url)     
+      53 +                    .map_err(|e| format!("Invalid proxy URL: {}
+         +", e))?;                                                       
+      54 +                builder = builder.proxy(proxy);                
+      55 +            }                                                  
+      56 +        }                                                      
+      57 +        if let Some(verify_ssl) = cfg.verify_ssl {             
+      58 +            builder = builder.danger_accept_invalid_certs(!veri
+         +fy_ssl);                                                       
+      59 +        }                                                      
+      60 +    }                                                          
+      61 +                                                               
+      62 +    let client = builder                                       
+      63          .build()
+      64          .map_err(|e| format!("Failed to create HTTP client: {}"
+          , e))?;
+      65  
+
+⏺ Now update commands.rs with the new history commands, write_file, and updated
+  send_request.
+
+⏺ Update(src-tauri/src/commands.rs)
+  ⎿  Added 3 lines, removed 2 lines
+      1  use crate::db::{self, AppDb};
+      2 -use crate::http::client::{self, HttpRequest};                   
+      2 +use crate::http::client::{self, HttpConfig, HttpRequest};       
+      3  use serde::{Deserialize, Serialize};
+      4  
+      5  // ── HTTP ──
+     ...
+       7  #[tauri::command]
+       8  pub async fn send_request(
+       9      request: HttpRequest,
+      10 +    config: Option<HttpConfig>,                                
+      11  ) -> Result<client::HttpResponse, String> {
+      11 -    client::execute_request(request).await                     
+      12 +    client::execute_request(request, config).await             
+      13  }
+      14  
+      15  // ── Workspace ──
+
+⏺ Now add history commands and write_file at the end of commands.rs.
+
+⏺ Update(src-tauri/src/commands.rs)
+  ⎿  Added 62 lines
+      236  
+      237      Ok(())
+      238  }
+      239 +                                                              
+      240 +// ── History ──                                              
+      241 +                                                              
+      242 +#[tauri::command]                                             
+      243 +pub fn log_history(                                           
+      244 +    db: tauri::State<'_, AppDb>,                              
+      245 +    data: db::history::CreateHistoryEntry,                    
+      246 +) -> Result<db::history::HistoryEntry, String> {              
+      247 +    let conn = db.0.lock().map_err(|e| e.to_string())?;       
+      248 +    db::history::create(&conn, &data)                         
+      249 +}                                                             
+      250 +                                                              
+      251 +#[tauri::command]                                             
+      252 +pub fn get_history_entry(                                     
+      253 +    db: tauri::State<'_, AppDb>,                              
+      254 +    id: String,                                               
+      255 +) -> Result<db::history::HistoryEntry, String> {              
+      256 +    let conn = db.0.lock().map_err(|e| e.to_string())?;       
+      257 +    db::history::get_by_id(&conn, &id)                        
+      258 +}                                                             
+      259 +                                                              
+      260 +#[tauri::command]                                             
+      261 +pub fn search_history(                                        
+      262 +    db: tauri::State<'_, AppDb>,                              
+      263 +    params: db::history::HistorySearchParams,                 
+      264 +) -> Result<Vec<db::history::HistoryEntry>, String> {         
+      265 +    let conn = db.0.lock().map_err(|e| e.to_string())?;       
+      266 +    db::history::search(&conn, &params)                       
+      267 +}                                                             
+      268 +                                                              
+      269 +#[tauri::command]                                             
+      270 +pub fn delete_history_entry(                                  
+      271 +    db: tauri::State<'_, AppDb>,                              
+      272 +    id: String,                                               
+      273 +) -> Result<(), String> {                                     
+      274 +    let conn = db.0.lock().map_err(|e| e.to_string())?;       
+      275 +    db::history::delete(&conn, &id)                           
+      276 +}                                                             
+      277 +                                                              
+      278 +#[tauri::command]                                             
+      279 +pub fn clear_history(db: tauri::State<'_, AppDb>) -> Result<()
+          +, String> {                                                   
+      280 +    let conn = db.0.lock().map_err(|e| e.to_string())?;       
+      281 +    db::history::clear(&conn)                                 
+      282 +}                                                             
+      283 +                                                              
+      284 +#[tauri::command]                                             
+      285 +pub fn cleanup_old_history(                                   
+      286 +    db: tauri::State<'_, AppDb>,                              
+      287 +    retention_days: i32,                                      
+      288 +) -> Result<u64, String> {                                    
+      289 +    let conn = db.0.lock().map_err(|e| e.to_string())?;       
+      290 +    db::history::cleanup_old(&conn, retention_days)           
+      291 +}                                                             
+      292 +                                                              
+      293 +// ── File I/O ──                                             
+      294 +                                                              
+      295 +#[tauri::command]                                             
+      296 +pub async fn write_file(path: String, content: String) -> Resu
+          +lt<(), String> {                                              
+      297 +    tokio::fs::write(&path, content)                          
+      298 +        .await                                                
+      299 +        .map_err(|e| format!("Failed to write file: {}", e))  
+      300 +}                                                             
+
+⏺ Now register the new commands in lib.rs.
+
+⏺ Update(src-tauri/src/lib.rs)
+  ⎿  Added 7 lines
+      40              commands::delete_environment,
+      41              commands::get_setting,
+      42              commands::set_setting,
+      43 +            commands::log_history,                             
+      44 +            commands::get_history_entry,                       
+      45 +            commands::search_history,                          
+      46 +            commands::delete_history_entry,                    
+      47 +            commands::clear_history,                           
+      48 +            commands::cleanup_old_history,                     
+      49 +            commands::write_file,                              
+      50          ])
+      51          .run(tauri::generate_context!())
+      52          .expect("error while running tauri application");
+
+⏺ Now let me verify the Rust compiles.
+
+⏺ Bash(cargo check --manifest-path src-tauri/Cargo.toml 2>&1)
+  ⎿   Downloading crates ...
+       Downloaded adler2 v2.0.1
+       Downloaded alloc-no-stdlib v2.0.4
+     … +331 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+⏺ Rust compiles. Let me also verify the frontend still builds (since
+  send_request now takes optional config).
+
+⏺ Bash(bun run build 2>&1)
+  ⎿  $ tsc -b && vite build
+     vite v6.4.1 building for production...
+     transforming...
+     … +41 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+⏺ All good. Commit Task 2.
+
+⏺ Bash(git add src-tauri/src/db/history.rs src-tauri/src/db/mod.rs
+      src-tauri/src/commands.rs src-tauri/src/http/client.rs
+      src-tauri/src/lib.rs && git commit -m "feat(h…)
+  ⎿ [main e9c043a] feat(history): add history database schema, CRUD command
+    s, and HTTP config
+     5 files changed, 369 insertions(+), 5 deletions(-)
+     create mode 100644 src-tauri/src/db/history.rs
+
+
+⏺ Task 3: History Frontend. Let me read the existing types and workspace-utils
+  to match patterns.
+
+⏺ Read 2 files (ctrl+o to expand)
+
+⏺ Now let me read the MethodBadge component and badge component to understand
+  sizing for history items.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now I'll create the history type, parse function, store, and sidebar
+  component. Let me do this efficiently.
+
+⏺ Write(src/types/history.ts)
+  ⎿  Wrote 28 lines to src/types/history.ts
+       1 import type {
+       2   HttpMethod,
+       3   HeaderEntry,
+       4   ParamEntry,
+       5   RequestBody,
+       6   RequestAuth,
+       7 } from "./request";
+       8 
+       9 export interface HistoryEntry {
+      10   id: string;
+     … +18 lines (ctrl+o to expand)
+
+⏺ Now add the parse function for history entries to workspace-utils.ts.
+
+⏺ Update(src/lib/workspace-utils.ts)
+  ⎿  Added 1 line
+      11    HttpMethod,
+      12  } from "@/types/request";
+      13  import type { Variable, Environment } from "@/types/environment
+          ";
+      14 +import type { HistoryEntry } from "@/types/history";           
+      15  
+      16  // Raw shapes from Rust IPC (snake_case, JSON strings for compl
+          ex fields)
+      17  interface RawCollection {
+
+⏺ Now add the RawHistoryEntry interface and parseHistoryEntry function. I'll add
+   them before the exports at the bottom.
+
+⏺ Update(src/lib/workspace-utils.ts)
+  ⎿  Added 46 lines
+      160  
+      161  export { parseCollection, parseFolder, parseRequest, parseEnvi
+           ronment };
+      162  
+      163 +// ── History ──                                              
+      164 +                                                              
+      165 +export interface RawHistoryEntry {                            
+      166 +  id: string;                                                 
+      167 +  method: string;                                             
+      168 +  url: string;                                                
+      169 +  headers: string;                                            
+      170 +  params: string;                                             
+      171 +  body: string;                                               
+      172 +  auth: string;                                               
+      173 +  response_status: number | null;                             
+      174 +  response_status_text: string | null;                        
+      175 +  response_headers: string | null;                            
+      176 +  response_body: string | null;                               
+      177 +  response_time_ms: number | null;                            
+      178 +  response_size_bytes: number | null;                         
+      179 +  response_body_truncated: boolean;                           
+      180 +  error: string | null;                                       
+      181 +  saved_request_id: string | null;                            
+      182 +  timestamp: string;                                          
+      183 +}                                                             
+      184 +                                                              
+      185 +export function parseHistoryEntry(raw: RawHistoryEntry): Histo
+          +ryEntry {                                                     
+      186 +  return {                                                    
+      187 +    id: raw.id,                                               
+      188 +    method: raw.method as HttpMethod,                         
+      189 +    url: raw.url,                                             
+      190 +    headers: parseJson<HeaderEntry[]>(raw.headers, []),       
+      191 +    params: parseJson<ParamEntry[]>(raw.params, []),          
+      192 +    body: parseJson<RequestBody>(raw.body, { type: "none" }), 
+      193 +    auth: parseJson<RequestAuth>(raw.auth, { type: "none" }), 
+      194 +    responseStatus: raw.response_status,                      
+      195 +    responseStatusText: raw.response_status_text,             
+      196 +    responseHeaders: raw.response_headers                     
+      197 +      ? parseJson<Record<string, string>>(raw.response_headers
+          +, {})                                                         
+      198 +      : null,                                                 
+      199 +    responseBody: raw.response_body,                          
+      200 +    responseTimeMs: raw.response_time_ms,                     
+      201 +    responseSizeBytes: raw.response_size_bytes,               
+      202 +    responseBodyTruncated: raw.response_body_truncated,       
+      203 +    error: raw.error,                                         
+      204 +    savedRequestId: raw.saved_request_id,                     
+      205 +    timestamp: raw.timestamp,                                 
+      206 +  };                                                          
+      207 +}                                                             
+      208 +                                                              
+      209  // Serialize typed objects back to JSON strings for Rust IPC
+      210  export function serializeHeaders(headers: HeaderEntry[]): stri
+           ng {
+      211    return JSON.stringify(headers);
+
+⏺ Now create the historyStore.
+
+⏺ Write(src/stores/historyStore.ts)
+  ⎿  Wrote 113 lines to src/stores/historyStore.ts
+       1 import { create } from "zustand";
+       2 import { invoke } from "@tauri-apps/api/core";
+       3 import type { HistoryEntry } from "@/types/history";
+       4 import type { RawHistoryEntry } from "@/lib/workspace-utils";
+       5 import { parseHistoryEntry } from "@/lib/workspace-utils";
+       6 
+       7 interface HistorySearchFilters {
+       8   query?: string;
+       9   method?: string;
+      10   statusMin?: number;
+     … +103 lines (ctrl+o to expand)
+
+⏺ Now create the HistorySidebar component.
+
+⏺ Write(src/components/history/HistorySidebar.tsx)
+  ⎿  Wrote 314 lines to src/components/history/HistorySidebar.tsx
+       1 import { useCallback, useEffect, useMemo, useRef, useState } fro
+         m "react";
+       2 import { useHistoryStore } from "@/stores/historyStore";
+       3 import { MethodBadge } from "@/components/request/MethodBadge";
+       4 import { Badge } from "@/components/ui/badge";
+       5 import { Input } from "@/components/ui/input";
+       6 import { Button } from "@/components/ui/button";
+       7 import { ScrollArea } from "@/components/ui/scroll-area";
+       8 import {
+       9   Tooltip,
+      10   TooltipContent,
+     … +304 lines (ctrl+o to expand)
+
+⏺ Now update the Sidebar to use HistorySidebar instead of the placeholder. I
+  need to add the onOpenEntry prop and wire it.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 2 lines
+      13    SidebarTrigger,
+      14  } from "@/components/ui/sidebar";
+      15  import type { Collection, Folder, SavedRequest } from "@/types/
+          collection";
+      16 +import type { HistoryEntry } from "@/types/history";           
+      17  import { CollectionTree } from "@/components/collections/Collec
+          tionTree";
+      18 +import { HistorySidebar } from "@/components/history/HistorySid
+         +ebar";                                                         
+      19  import { Button } from "@/components/ui/button";
+      20  import {
+      21    Tooltip,
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 2 lines
+      29    requests: SavedRequest[];
+      30    onCreateCollection: () => void;
+      31    onOpenSettings: () => void;
+      32 +  onOpenHistoryEntry: (entry: HistoryEntry) => void;           
+      33  }
+      34  
+      35  export function Sidebar({
+     ...
+      38    requests,
+      39    onCreateCollection,
+      40    onOpenSettings,
+      41 +  onOpenHistoryEntry,                                          
+      42  }: SidebarProps) {
+      43    return (
+      44      <ShadcnSidebar collapsible="icon">
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 1 line, removed 3 lines
+       97              History
+       98            </SidebarGroupLabel>
+       99            <SidebarGroupContent>
+      100 -            <p className="text-[11px] text-muted-foreground/40
+          - py-6 text-center">                                           
+      101 -              No history yet                                  
+      102 -            </p>                                              
+      100 +            <HistorySidebar onOpenEntry={onOpenHistoryEntry} /
+          +>                                                             
+      101            </SidebarGroupContent>
+      102          </SidebarGroup>
+      103        </SidebarContent>
+
+⏺ Now update App.tsx to load history on mount, pass onOpenHistoryEntry to
+  Sidebar, and run cleanup.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      13  import { useCollectionStore } from "@/stores/collectionStore";
+      14  import { useEnvironmentStore } from "@/stores/environmentStore"
+          ;
+      15  import { useSettingsStore } from "@/stores/settingsStore";
+      16 +import { useHistoryStore } from "@/stores/historyStore";       
+      17  import { useKeyboard } from "@/hooks/useKeyboard";
+      18  import { useAutoSave } from "@/hooks/useAutoSave";
+      19  import {
+
+⏺ Now add the history imports and the invoke for cleanup. I need to add to the
+  mount effect and pass the prop through. Let me read the current state of
+  App.tsx around the relevant areas.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 2 lines
+      22    getFolderChain,
+      23  } from "@/lib/variables";
+      24  import type { VariableCompletionItem } from "@/lib/codemirror/v
+          ariable-extension";
+      25 +import { invoke } from "@tauri-apps/api/core";                 
+      26  import { Plus, Zap } from "lucide-react";
+      27  import { Button } from "@/components/ui/button";
+      28 +import type { HistoryEntry } from "@/types/history";           
+      29  
+      30  function EmptyState() {
+      31    const openNewTab = useTabStore((s) => s.openNewTab);
+
+⏺ Now add the historyStore loadRecent call and cleanup in the mount effect.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      71    const activeEnvironmentId = useEnvironmentStore((s) => s.acti
+          veEnvironmentId);
+      72  
+      73    const loadSettings = useSettingsStore((s) => s.loadSettings);
+      74 +  const loadHistory = useHistoryStore((s) => s.loadRecent);    
+      75  
+      76    const [showCreateCollection, setShowCreateCollection] = useSt
+          ate(false);
+      77    const [showSaveRequest, setShowSaveRequest] = useState(false)
+          ;
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 7 lines, removed 2 lines
+      81    // Auto-save dirty tabs that are already persisted
+      82    useAutoSave();
+      83  
+      84 -  // Load workspace and settings on mount                      
+      84 +  // Load workspace, settings, and history on mount            
+      85    useEffect(() => {
+      86      loadWorkspace();
+      87      loadSettings();
+      88 -  }, [loadWorkspace, loadSettings]);                           
+      88 +    loadHistory();                                             
+      89  
+      90 +    // Cleanup old history based on retention setting          
+      91 +    const { historyRetentionDays } = useSettingsStore.getState(
+         +);                                                             
+      92 +    invoke("cleanup_old_history", { retentionDays: historyReten
+         +tionDays }).catch(() => {});                                   
+      93 +  }, [loadWorkspace, loadSettings, loadHistory]);              
+      94 +                                                               
+      95    // Open a default tab if none exist on initial load
+      96    useEffect(() => {
+      97      if (tabs.length === 0) {
+
+⏺ Now add the onOpenHistoryEntry handler and pass it to Sidebar. For now it will
+   be a placeholder that we'll complete in Task 4 when we add read-only tabs.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ I need to add a handleOpenHistoryEntry callback. For now I'll stub it to open
+  a new tab with the entry's request data — the full read-only implementation is
+   Task 4.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 5 lines
+      100      // eslint-disable-next-line react-hooks/exhaustive-deps
+      101    }, []);
+      102  
+      103 +  // Stub: will be replaced with openHistoryEntry in Task 4   
+      104 +  const handleOpenHistoryEntry = useCallback((_entry: HistoryE
+          +ntry) => {                                                    
+      105 +    // Will be implemented with read-only tabs                
+      106 +  }, []);                                                     
+      107 +                                                              
+      108    const focusUrl = useCallback(() => {
+      109      const wrapper = document.querySelector('[data-testid="url-
+           input"]');
+      110      const cmContent = wrapper?.querySelector<HTMLElement>(".cm
+           -content");
+
+⏺ Now pass it to Sidebar.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      294              requests={requests}
+      295              onCreateCollection={() => setShowCreateCollection(
+           true)}
+      296              onOpenSettings={() => setShowSettings(true)}
+      297 +            onOpenHistoryEntry={handleOpenHistoryEntry}       
+      298            />
+      299          }
+      300          tabBar={
+
+⏺ Let me build and test.
+
+⏺ Bash(bun run build 2>&1)
+  ⎿  $ tsc -b && vite build
+     vite v6.4.1 building for production...
+     transforming...
+     … +41 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+⏺ Bash(bun run test 2>&1)
+  ⎿  $ vitest run
+
+      RUN  v4.0.18 /Users/karthikvinayan/code/work/Hermes
+     … +33 lines (ctrl+o to expand)
+
+⏺ All passing. Commit Task 3.
+
+⏺ Bash(git add src/types/history.ts src/stores/historyStore.ts
+      src/components/history/HistorySidebar.tsx src/lib/workspace-utils.ts
+      src/components/layout/Sidebar.tsx s…)
+  ⎿ [main 13e60f4] feat(history): add history store, sidebar with search/fi
+    lter/date grouping
+     6 files changed, 521 insertions(+), 5 deletions(-)
+    … +3 lines (ctrl+o to expand)
+
+
+⏺ Task 4: History Integration. Need to read tabStore.ts, UrlBar,
+  RequestConfigTabs, KeyValueEditor, BodyEditor, AuthEditor.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now I need to read the editor components to add disabled props.
+
+⏺ Read 3 files (ctrl+o to expand)
+
+⏺ Now let me read the BodyEditor and AuthEditor.
+
+⏺ Read 2 files (ctrl+o to expand)
+
+⏺ Now I have a clear picture. Let me implement Task 4 in a focused way. The key
+  changes:
+
+  1. tabStore.ts: Add historyEntryId, readOnly to Tab, add openHistoryEntry(),
+  restoreFromHistory(), modify sendRequest() to log history + pass HttpConfig
+  2. UrlBar.tsx: Add disabled prop
+  3. KeyValueEditor.tsx: Add disabled prop
+  4. BodyEditor.tsx: Add disabled prop
+  5. AuthEditor.tsx: Add disabled prop
+  6. RequestConfigTabs.tsx: Forward disabled prop
+  7. App.tsx: Add read-only banner, implement handleOpenHistoryEntry
+
+  Let me start with tabStore.ts.
+
+⏺ Write(src/stores/tabStore.ts)
+  ⎿  Added 130 lines, removed 2 lines
+       9    HttpResponse,
+      10  } from "@/types/request";
+      11  import type { SavedRequest } from "@/types/collection";
+      12 +import type { HistoryEntry } from "@/types/history";           
+      13  import {
+      14    parseQueryParams,
+      15    buildUrlWithParams,
+     ...
+      17    injectAuth,
+      18  } from "@/lib/request-utils";
+      19  import { resolveRequest } from "@/lib/variables";
+      20 +import { useHistoryStore } from "@/stores/historyStore";       
+      21 +import { useSettingsStore } from "@/stores/settingsStore";     
+      22 +import {                                                       
+      23 +  serializeHeaders,                                            
+      24 +  serializeParams,                                             
+      25 +  serializeBody as serializeBodyJson,                          
+      26 +  serializeAuth,                                               
+      27 +} from "@/lib/workspace-utils";                                
+      28  
+      29  export interface TabRequestState {
+      30    method: HttpMethod;
+     ...
+      41  export interface Tab {
+      42    id: string;
+      43    savedRequestId: string | null;
+      44 +  historyEntryId: string | null;                               
+      45 +  readOnly: boolean;                                           
+      46    title: string;
+      47    state: TabRequestState;
+      48    savedSnapshot: TabRequestState | null;
+     ...
+       99    // Tab lifecycle
+      100    openNewTab: () => void;
+      101    openSavedRequest: (request: SavedRequest) => void;
+      102 +  openHistoryEntry: (entry: HistoryEntry) => void;            
+      103 +  restoreFromHistory: () => void;                             
+      104    closeTab: (tabId: string) => void;
+      105    setActiveTab: (tabId: string) => void;
+      106  
+     ...
+      144      const tab: Tab = {
+      145        id,
+      146        savedRequestId: null,
+      147 +      historyEntryId: null,                                   
+      148 +      readOnly: false,                                        
+      149        title: "New Request",
+      150        state: defaultTabState(),
+      151        savedSnapshot: null,
+     ...
+      169      const tab: Tab = {
+      170        id,
+      171        savedRequestId: request.id,
+      172 +      historyEntryId: null,                                   
+      173 +      readOnly: false,                                        
+      174        title: request.name,
+      175        state,
+      176        savedSnapshot: { ...state },
+     ...
+      181      }));
+      182    },
+      183  
+      184 +  openHistoryEntry: (entry) => {                              
+      185 +    const id = generateId();                                  
+      186 +    let title: string;                                        
+      187 +    try {                                                     
+      188 +      const parsed = new URL(entry.url);                      
+      189 +      title = `${entry.method} ${parsed.pathname}`;           
+      190 +    } catch {                                                 
+      191 +      title = `${entry.method} ${entry.url.slice(0, 30)}`;    
+      192 +    }                                                         
+      193 +                                                              
+      194 +    const response: HttpResponse | null =                     
+      195 +      entry.responseStatus != null                            
+      196 +        ? {                                                   
+      197 +            status: entry.responseStatus,                     
+      198 +            status_text: entry.responseStatusText ?? "",      
+      199 +            headers: entry.responseHeaders ?? {},             
+      200 +            body: entry.responseBody ?? "",                   
+      201 +            time_ms: entry.responseTimeMs ?? 0,               
+      202 +            size_bytes: entry.responseSizeBytes ?? 0,         
+      203 +          }                                                   
+      204 +        : null;                                               
+      205 +                                                              
+      206 +    const tab: Tab = {                                        
+      207 +      id,                                                     
+      208 +      savedRequestId: null,                                   
+      209 +      historyEntryId: entry.id,                               
+      210 +      readOnly: true,                                         
+      211 +      title,                                                  
+      212 +      state: {                                                
+      213 +        method: entry.method,                                 
+      214 +        url: entry.url,                                       
+      215 +        headers: entry.headers,                               
+      216 +        params: entry.params,                                 
+      217 +        bodyConfig: entry.body,                               
+      218 +        auth: entry.auth,                                     
+      219 +        response,                                             
+      220 +        loading: false,                                       
+      221 +        error: entry.error,                                   
+      222 +      },                                                      
+      223 +      savedSnapshot: null,                                    
+      224 +    };                                                        
+      225 +                                                              
+      226 +    set((s) => ({                                             
+      227 +      tabs: [...s.tabs, tab],                                 
+      228 +      activeTabId: id,                                        
+      229 +    }));                                                      
+      230 +  },                                                          
+      231 +                                                              
+      232 +  restoreFromHistory: () => {                                 
+      233 +    const tab = get().getActiveTab();                         
+      234 +    if (!tab || !tab.readOnly) return;                        
+      235 +    set((s) => ({                                             
+      236 +      tabs: s.tabs.map((t) =>                                 
+      237 +        t.id === tab.id                                       
+      238 +          ? {                                                 
+      239 +              ...t,                                           
+      240 +              historyEntryId: null,                           
+      241 +              readOnly: false,                                
+      242 +              title: "New Request",                           
+      243 +            }                                                 
+      244 +          : t,                                                
+      245 +      ),                                                      
+      246 +    }));                                                      
+      247 +  },                                                          
+      248 +                                                              
+      249    closeTab: (tabId) => {
+      250      set((s) => {
+      251        const idx = s.tabs.findIndex((t) => t.id === tabId);
+     ...
+      316  
+      317    sendRequest: async (resolveAuth, variableScope) => {
+      318      const tab = get().getActiveTab();
+      237 -    if (!tab) return;                                         
+      319 +    if (!tab || tab.readOnly) return;                         
+      320  
+      321      // Resolve auth first (may come from parent collection/fol
+           der)
+      322      const stateWithAuth = resolveAuth
+     ...
+      346        })),
+      347      }));
+      348  
+      349 +    // Build HTTP config from settings                        
+      350 +    const settings = useSettingsStore.getState();             
+      351 +    const config = {                                          
+      352 +      timeout_ms: settings.timeoutMs,                         
+      353 +      proxy_url: settings.proxyUrl || null,                   
+      354 +      verify_ssl: settings.verifySsl,                         
+      355 +    };                                                        
+      356 +                                                              
+      357      try {
+      358        const injected = injectAuth(headers, params, auth);
+      359        const finalUrl = buildUrlWithParams(url.trim(), injected
+           .params);
+     ...
+      378            headers: finalHeaders,
+      379            body: body || null,
+      380          },
+      381 +        config,                                               
+      382        });
+      383  
+      384        set((s) => ({
+     ...
+      387            loading: false,
+      388          })),
+      389        }));
+      390 +                                                              
+      391 +      // Log to history (fire-and-forget)                     
+      392 +      useHistoryStore.getState().logEntry({                   
+      393 +        method: tab.state.method,                             
+      394 +        url: tab.state.url,                                   
+      395 +        headers: serializeHeaders(tab.state.headers),         
+      396 +        params: serializeParams(tab.state.params),            
+      397 +        body: serializeBodyJson(tab.state.bodyConfig),        
+      398 +        auth: serializeAuth(tab.state.auth),                  
+      399 +        response_status: response.status,                     
+      400 +        response_status_text: response.status_text,           
+      401 +        response_headers: JSON.stringify(response.headers),   
+      402 +        response_body: response.body,                         
+      403 +        response_time_ms: response.time_ms,                   
+      404 +        response_size_bytes: response.size_bytes,             
+      405 +        error: null,                                          
+      406 +        saved_request_id: tab.savedRequestId,                 
+      407 +      }).catch(() => {});                                     
+      408      } catch (err) {
+      409 +      const errorMsg = err instanceof Error ? err.message : St
+          +ring(err);                                                    
+      410        set((s) => ({
+      411          tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({
+      302 -          error: err instanceof Error ? err.message : String(e
+          -rr),                                                          
+      412 +          error: errorMsg,                                    
+      413            loading: false,
+      414          })),
+      415        }));
+      416 +                                                              
+      417 +      // Log error to history too                             
+      418 +      useHistoryStore.getState().logEntry({                   
+      419 +        method: tab.state.method,                             
+      420 +        url: tab.state.url,                                   
+      421 +        headers: serializeHeaders(tab.state.headers),         
+      422 +        params: serializeParams(tab.state.params),            
+      423 +        body: serializeBodyJson(tab.state.bodyConfig),        
+      424 +        auth: serializeAuth(tab.state.auth),                  
+      425 +        response_status: null,                                
+      426 +        response_status_text: null,                           
+      427 +        response_headers: null,                               
+      428 +        response_body: null,                                  
+      429 +        response_time_ms: null,                               
+      430 +        response_size_bytes: null,                            
+      431 +        error: errorMsg,                                      
+      432 +        saved_request_id: tab.savedRequestId,                 
+      433 +      }).catch(() => {});                                     
+      434      }
+      435    },
+      436  
+
+⏺ Now add disabled prop to UrlBar.
+
+⏺ Update(src/components/request/UrlBar.tsx)
+  ⎿  Added 2 lines
+      86    method,
+      87    url,
+      88    loading,
+      89 +  disabled,                                                    
+      90    onMethodChange,
+      91    onUrlChange,
+      92    onSend,
+     ...
+       96    method: HttpMethod;
+       97    url: string;
+       98    loading: boolean;
+       99 +  disabled?: boolean;                                         
+      100    onMethodChange: (method: HttpMethod) => void;
+      101    onUrlChange: (url: string) => void;
+      102    onSend: () => void;
+
+⏺ Now I need to add readOnly and editable to the CodeMirror and conditionally
+  hide the send button and disable method selector.
+
+⏺ Update(src/components/request/UrlBar.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      146      <div className="flex items-center gap-3">
+      147        {/* Method dropdown */}
+      148        <DropdownMenu>
+      149 -        <DropdownMenuTrigger asChild>                         
+      149 +        <DropdownMenuTrigger asChild disabled={disabled}>     
+      150            <Button
+      151              variant="ghost"
+      152              className="flex items-center gap-1.5 px-3 h-10 bg-
+           background hover:bg-background/80 border border-border rounded
+           -lg"
+      153 +            disabled={disabled}                               
+      154            >
+      155              <MethodBadge method={method} />
+      155 -            <ChevronDown className="h-3 w-3 text-muted-foregro
+          -und" />                                                       
+      156 +            {!disabled && <ChevronDown className="h-3 w-3 text
+          +-muted-foreground" />}                                        
+      157            </Button>
+      158          </DropdownMenuTrigger>
+      159          <DropdownMenuContent align="start" className="min-w-[1
+           40px]">
+
+⏺ Update(src/components/request/UrlBar.tsx)
+  ⎿  Added 2 lines
+      181            onChange={onUrlChange}
+      182            extensions={extensions}
+      183            theme="none"
+      184 +          readOnly={disabled}                                 
+      185 +          editable={!disabled}                                
+      186            placeholder="Enter request URL"
+      187            basicSetup={{
+      188              lineNumbers: false,
+
+⏺ Now conditionally hide the send button when disabled.
+
+⏺ Update(src/components/request/UrlBar.tsx)
+  ⎿  Added 1 line, removed 1 line
+      207        </div>
+      208  
+      209        {/* Send button */}
+      210 -      <TooltipProvider delayDuration={300}>                   
+      210 +      {!disabled && <TooltipProvider delayDuration={300}>     
+      211          <Tooltip>
+      212            <TooltipTrigger asChild>
+      213              <Button
+
+⏺ Update(src/components/request/UrlBar.tsx)
+  ⎿  Added 1 line, removed 1 line
+      228              <span className="text-xs">⌘ Enter</span>
+      229            </TooltipContent>
+      230          </Tooltip>
+      231 -      </TooltipProvider>                                      
+      231 +      </TooltipProvider>}                                     
+      232      </div>
+      233    );
+      234  }
+
+⏺ Now add disabled to KeyValueEditor.
+
+⏺ Update(src/components/request/KeyValueEditor.tsx)
+  ⎿  Added 2 lines
+      14    onChange: (entries: KVEntry[]) => void;
+      15    keyPlaceholder?: string;
+      16    valuePlaceholder?: string;
+      17 +  disabled?: boolean;                                          
+      18  }
+      19  
+      20  export function KeyValueEditor({
+     ...
+      22    onChange,
+      23    keyPlaceholder = "Key",
+      24    valuePlaceholder = "Value",
+      25 +  disabled,                                                    
+      26  }: KeyValueEditorProps) {
+      27    const update = useCallback(
+      28      (index: number, field: keyof KVEntry, value: string | boole
+          an) => {
+
+⏺ Now make inputs, checkbox, remove/add buttons disabled in KVEditor.
+
+⏺ Update(src/components/request/KeyValueEditor.tsx)
+  ⎿  Added 13 lines, removed 8 lines
+       79              checked={entry.enabled}
+       80              onCheckedChange={(checked) => update(i, "enabled",
+            !!checked)}
+       81              className="size-3.5"
+       82 +            disabled={disabled}                               
+       83            />
+       84            <input
+       85              value={entry.key}
+       86              onChange={(e) => handleKeyInput(i, e.target.value)
+           }
+       87              placeholder={keyPlaceholder}
+       88 +            readOnly={disabled}                               
+       89              className="flex-1 bg-transparent border-0 border-b
+            border-transparent focus:border-border/50 font-mono text-xs p
+           x-1 py-0.5 outline-none placeholder:text-muted-foreground/40 t
+           ransition-colors"
+       90            />
+       91            <input
+       92              value={entry.value}
+       93              onChange={(e) => update(i, "value", e.target.value
+           )}
+       94              placeholder={valuePlaceholder}
+       95 +            readOnly={disabled}                               
+       96              className="flex-1 bg-transparent border-0 border-b
+            border-transparent focus:border-border/50 font-mono text-xs p
+           x-1 py-0.5 outline-none placeholder:text-muted-foreground/40 t
+           ransition-colors"
+       97            />
+       95 -          <Button                                             
+       96 -            variant="ghost"                                   
+       97 -            size="icon-xs"                                    
+       98 -            onClick={() => remove(i)}                         
+       99 -            className="opacity-0 group-hover:opacity-100 trans
+          -ition-opacity text-muted-foreground hover:text-destructive"   
+      100 -          >                                                   
+      101 -            <X className="size-3" />                          
+      102 -          </Button>                                           
+       98 +          {!disabled && (                                     
+       99 +            <Button                                           
+      100 +              variant="ghost"                                 
+      101 +              size="icon-xs"                                  
+      102 +              onClick={() => remove(i)}                       
+      103 +              className="opacity-0 group-hover:opacity-100 tra
+          +nsition-opacity text-muted-foreground hover:text-destructive" 
+      104 +            >                                                 
+      105 +              <X className="size-3" />                        
+      106 +            </Button>                                         
+      107 +          )}                                                  
+      108          </div>
+      109        ))}
+      110  
+
+⏺ Update(src/components/request/KeyValueEditor.tsx)
+  ⎿  Added 9 lines, removed 7 lines
+      109        ))}
+      110  
+      111        {/* Add button */}
+      112 -      <button                                                 
+      113 -        onClick={add}                                         
+      114 -        className="flex items-center gap-1 px-2 py-1.5 text-mu
+          -ted-foreground hover:text-foreground transition-colors cursor-
+          -pointer"                                                      
+      115 -      >                                                       
+      116 -        <Plus className="size-3" />                           
+      117 -        <span>Add</span>                                      
+      118 -      </button>                                               
+      112 +      {!disabled && (                                         
+      113 +        <button                                               
+      114 +          onClick={add}                                       
+      115 +          className="flex items-center gap-1 px-2 py-1.5 text-
+          +muted-foreground hover:text-foreground transition-colors curso
+          +r-pointer"                                                    
+      116 +        >                                                     
+      117 +          <Plus className="size-3" />                         
+      118 +          <span>Add</span>                                    
+      119 +        </button>                                             
+      120 +      )}                                                      
+      121      </div>
+      122    );
+      123  }
+
+⏺ Now add disabled to BodyEditor.
+
+⏺ Update(src/components/request/BodyEditor.tsx)
+  ⎿  Added 1 line
+      26    onChange: (body: RequestBody) => void;
+      27    variableItems?: () => VariableCompletionItem[];
+      28    isVariableResolved?: (name: string) => boolean;
+      29 +  disabled?: boolean;                                          
+      30  }
+      31  
+      32  type BodyType = RequestBody["type"];
+
+⏺ Update(src/components/request/BodyEditor.tsx)
+  ⎿  Added 1 line, removed 1 line
+      54    }
+      55  }
+      56  
+      57 -export function BodyEditor({ body, onChange, variableItems, isV
+         -ariableResolved }: BodyEditorProps) {                          
+      57 +export function BodyEditor({ body, onChange, variableItems, isV
+         +ariableResolved, disabled }: BodyEditorProps) {                
+      58    const handleTypeChange = useCallback(
+      59      (type: string) => {
+      60        onChange(defaultBody(type as BodyType));
+
+⏺ Disable the type selector buttons and CodeMirror + KV editors.
+
+⏺ Update(src/components/request/BodyEditor.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      103            <button
+      104              key={t.value}
+      105              onClick={() => handleTypeChange(t.value)}
+      106 -            className={`px-2.5 py-1 rounded-md text-xs font-me
+          -dium transition-colors cursor-pointer ${                      
+      106 +            disabled={disabled}                               
+      107 +            className={`px-2.5 py-1 rounded-md text-xs font-me
+          +dium transition-colors ${disabled ? "" : "cursor-pointer"} ${ 
+      108                body.type === t.value
+      109                  ? "bg-primary text-primary-foreground"
+      110                  : "bg-muted text-muted-foreground hover:text-f
+           oreground"
+
+⏺ Make the raw CodeMirror readOnly when disabled.
+
+⏺ Update(src/components/request/BodyEditor.tsx)
+  ⎿  Added 2 lines
+      159                onChange={(value) => onChange({ ...body, content
+           : value })}
+      160                extensions={extensions}
+      161                theme={oneDark}
+      162 +              readOnly={disabled}                             
+      163 +              editable={!disabled}                            
+      164                height="200px"
+      165                basicSetup={{
+      166                  lineNumbers: true,
+
+⏺ Pass disabled to the KeyValueEditor inside BodyEditor.
+
+⏺ Update(src/components/request/BodyEditor.tsx)
+  ⎿  Added 1 line
+      180            onChange={(entries) => onChange({ ...body, entries }
+           )}
+      181            keyPlaceholder="Key"
+      182            valuePlaceholder="Value"
+      183 +          disabled={disabled}                                 
+      184          />
+      185        )}
+      186  
+
+⏺ Now add disabled to AuthEditor.
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 1 line
+      21    auth: RequestAuth;
+      22    onChange: (auth: RequestAuth) => void;
+      23    inheritedAuth?: InheritedAuth | null;
+      24 +  disabled?: boolean;                                          
+      25  }
+      26  
+      27  const AUTH_TYPES = [
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 1 line, removed 1 line
+      50    apikey: "API Key",
+      51  };
+      52  
+      53 -export function AuthEditor({ auth, onChange, inheritedAuth }: A
+         -uthEditorProps) {                                              
+      53 +export function AuthEditor({ auth, onChange, inheritedAuth, dis
+         +abled }: AuthEditorProps) {                                    
+      54    const [showToken, setShowToken] = useState(false);
+      55    const [showPassword, setShowPassword] = useState(false);
+      56  
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 1 line
+      61          <Select
+      62            value={auth.type}
+      63            onValueChange={(type) => onChange(defaults(type))}
+      64 +          disabled={disabled}                                  
+      65          >
+      66            <SelectTrigger size="sm" className="w-48">
+      67              <SelectValue />
+
+⏺ Now disable the input fields in auth forms. I'll use readOnly on the inputs.
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 1 line
+      108                  onChange({ ...auth, token: e.target.value })
+      109                }
+      110                placeholder="Enter bearer token"
+      111 +              readOnly={disabled}                             
+      112                className="pr-9 font-mono text-xs h-8"
+      113              />
+      114              <Button
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 1 line
+      137                  onChange({ ...auth, username: e.target.value }
+           )
+      138                }
+      139                placeholder="Username"
+      140 +              readOnly={disabled}                             
+      141                className="font-mono text-xs h-8"
+      142              />
+      143            </div>
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 1 line
+      151                    onChange({ ...auth, password: e.target.value
+            })
+      152                  }
+      153                  placeholder="Password"
+      154 +                readOnly={disabled}                           
+      155                  className="pr-9 font-mono text-xs h-8"
+      156                />
+      157                <Button
+
+⏺ Now disable apikey inputs too. Let me find the apikey section.
+
+⏺ Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(src/components/request/AuthEditor.tsx)
+  ⎿  Added 3 lines
+      181                  onChange({ ...auth, key: e.target.value })
+      182                }
+      183                placeholder="e.g. X-API-Key"
+      184 +              readOnly={disabled}                             
+      185                className="font-mono text-xs h-8"
+      186              />
+      187            </div>
+     ...
+      193                  onChange({ ...auth, value: e.target.value })
+      194                }
+      195                placeholder="Enter API key value"
+      196 +              readOnly={disabled}                             
+      197                className="font-mono text-xs h-8"
+      198              />
+      199            </div>
+     ...
+      204                onValueChange={(addTo: "header" | "query") =>
+      205                  onChange({ ...auth, addTo })
+      206                }
+      207 +              disabled={disabled}                             
+      208              >
+      209                <SelectTrigger size="sm" className="w-32">
+      210                  <SelectValue />
+
+⏺ Now add disabled prop to RequestConfigTabs and forward it.
+
+⏺ Update(src/components/request/RequestConfigTabs.tsx)
+  ⎿  Added 1 line
+      27    inheritedAuth?: InheritedAuth | null;
+      28    variableItems?: () => VariableCompletionItem[];
+      29    isVariableResolved?: (name: string) => boolean;
+      30 +  disabled?: boolean;                                          
+      31  }
+      32  
+      33  function countActive(entries: { key: string; enabled: boolean }
+          []): number {
+
+⏺ Update(src/components/request/RequestConfigTabs.tsx)
+  ⎿  Added 1 line
+      46    inheritedAuth,
+      47    variableItems,
+      48    isVariableResolved,
+      49 +  disabled,                                                    
+      50  }: RequestConfigTabsProps) {
+      51    const paramCount = countActive(params);
+      52    const headerCount = countActive(headers);
+
+⏺ Now forward disabled to child components.
+
+⏺ Update(src/components/request/RequestConfigTabs.tsx)
+  ⎿  Added 4 lines, removed 2 lines
+       95            onChange={onParamsChange}
+       96            keyPlaceholder="Parameter"
+       97            valuePlaceholder="Value"
+       98 +          disabled={disabled}                                 
+       99          />
+      100        </TabsContent>
+      101  
+     ...
+      105            onChange={onHeadersChange}
+      106            keyPlaceholder="Header"
+      107            valuePlaceholder="Value"
+      108 +          disabled={disabled}                                 
+      109          />
+      110        </TabsContent>
+      111  
+      112        <TabsContent value="auth" className="overflow-y-auto p-4
+           ">
+      111 -        <AuthEditor auth={auth} onChange={onAuthChange} inheri
+          -tedAuth={inheritedAuth} />                                    
+      113 +        <AuthEditor auth={auth} onChange={onAuthChange} inheri
+          +tedAuth={inheritedAuth} disabled={disabled} />                
+      114        </TabsContent>
+      115  
+      116        <TabsContent value="body" className="overflow-y-auto p-4
+           ">
+      115 -        <BodyEditor body={bodyConfig} onChange={onBodyConfigCh
+          -ange} variableItems={variableItems} isVariableResolved={isVari
+          -ableResolved} />                                              
+      117 +        <BodyEditor body={bodyConfig} onChange={onBodyConfigCh
+          +ange} variableItems={variableItems} isVariableResolved={isVari
+          +ableResolved} disabled={disabled} />                          
+      118        </TabsContent>
+      119      </Tabs>
+      120    );
+
+⏺ Now update App.tsx to add the read-only banner and implement
+  handleOpenHistoryEntry.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 2 lines
+      64    const setBodyConfig = useTabStore((s) => s.setBodyConfig);
+      65    const setAuth = useTabStore((s) => s.setAuth);
+      66    const sendRequest = useTabStore((s) => s.sendRequest);
+      67 +  const openHistoryEntry = useTabStore((s) => s.openHistoryEntr
+         +y);                                                            
+      68 +  const restoreFromHistory = useTabStore((s) => s.restoreFromHi
+         +story);                                                        
+      69    const updateSavedSnapshot = useTabStore((s) => s.updateSavedS
+          napshot);
+      70    const tabs = useTabStore((s) => s.tabs);
+      71  
+
+⏺ Now replace the stub handleOpenHistoryEntry with the real one.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 4 lines, removed 4 lines
+      102      // eslint-disable-next-line react-hooks/exhaustive-deps
+      103    }, []);
+      104  
+      105 -  // Stub: will be replaced with openHistoryEntry in Task 4   
+      106 -  const handleOpenHistoryEntry = useCallback((_entry: HistoryE
+          -ntry) => {                                                    
+      107 -    // Will be implemented with read-only tabs                
+      108 -  }, []);                                                     
+      105 +  const handleOpenHistoryEntry = useCallback(                 
+      106 +    (entry: HistoryEntry) => openHistoryEntry(entry),         
+      107 +    [openHistoryEntry],                                       
+      108 +  );                                                          
+      109  
+      110    const focusUrl = useCallback(() => {
+      111      const wrapper = document.querySelector('[data-testid="url-
+           input"]');
+
+⏺ Now add the read-only banner above the URL bar and pass disabled to UrlBar and
+   RequestConfigTabs. Let me read the current rendering area.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 29 lines, removed 10 lines
+      306          }
+      307          urlBar={
+      308            hasActiveTab ? (
+      309 -            <UrlBar                                           
+      310 -              method={activeTab.state.method}                 
+      311 -              url={activeTab.state.url}                       
+      312 -              loading={activeTab.state.loading}               
+      313 -              onMethodChange={setMethod}                      
+      314 -              onUrlChange={setUrl}                            
+      315 -              onSend={handleSend}                             
+      316 -              variableItems={getVariableItems}                
+      317 -              isVariableResolved={isVariableResolved}         
+      318 -            />                                                
+      309 +            <div>                                             
+      310 +              {activeTab.readOnly && (                        
+      311 +                <div className="bg-muted/50 px-4 py-2 flex ite
+          +ms-center justify-between text-xs border-b border-border mb-2 
+          +rounded-md">                                                  
+      312 +                  <span className="text-muted-foreground">    
+      313 +                    History entry — read only                 
+      314 +                  </span>                                     
+      315 +                  <Button                                     
+      316 +                    size="sm"                                 
+      317 +                    variant="outline"                         
+      318 +                    className="h-6 text-xs"                   
+      319 +                    onClick={restoreFromHistory}              
+      320 +                  >                                           
+      321 +                    Restore as New Request                    
+      322 +                  </Button>                                   
+      323 +                </div>                                        
+      324 +              )}                                              
+      325 +              <UrlBar                                         
+      326 +                method={activeTab.state.method}               
+      327 +                url={activeTab.state.url}                     
+      328 +                loading={activeTab.state.loading}             
+      329 +                disabled={activeTab.readOnly}                 
+      330 +                onMethodChange={setMethod}                    
+      331 +                onUrlChange={setUrl}                          
+      332 +                onSend={handleSend}                           
+      333 +                variableItems={getVariableItems}              
+      334 +                isVariableResolved={isVariableResolved}       
+      335 +              />                                              
+      336 +            </div>                                            
+      337            ) : null
+      338          }
+      339          requestConfig={
+     ...
+      350                inheritedAuth={inheritedAuth}
+      351                variableItems={getVariableItems}
+      352                isVariableResolved={isVariableResolved}
+      353 +              disabled={activeTab.readOnly}                   
+      354              />
+      355            ) : null
+      356          }
+
+⏺ Now build and test.
+
+⏺ Bash(bun run build 2>&1)
+  ⎿  $ tsc -b && vite build
+     vite v6.4.1 building for production...
+     transforming...
+     … +41 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+⏺ Bash(bun run test 2>&1)
+  ⎿  $ vitest run
+
+      RUN  v4.0.18 /Users/karthikvinayan/code/work/Hermes
+     … +33 lines (ctrl+o to expand)
+
+⏺ All green. Commit Task 4.
+
+⏺ Bash(git add src/stores/tabStore.ts src/components/request/UrlBar.tsx
+      src/components/request/RequestConfigTabs.tsx
+      src/components/request/KeyValueEditor.tsx src/comp…)
+  ⎿ [main 9bd42cd] feat(history): integrate history logging, read-only tabs
+    , and restore
+     7 files changed, 220 insertions(+), 40 deletions(-)
+
+
+⏺ Task 5: Export. First, add tauri-plugin-dialog to Rust, then create
+  export-utils.ts, update TreeContextMenu and ResponseToolbar.
+
+⏺ Read 3 files (ctrl+o to expand)
+
+⏺ Let me read the request-utils to understand serializeBody.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Now let me first add the Rust dependency and JS package, then create
+  export-utils.ts, then modify the context menus and toolbar.
+
+⏺ Update(src-tauri/Cargo.toml)
+  ⎿  Added 1 line
+      21  thiserror = "2"
+      22  rusqlite = { version = "0.31", features = ["bundled"] }
+      23  uuid = { version = "1", features = ["v4"] }
+      24 +tauri-plugin-dialog = "2"                                      
+
+⏺ Update(src-tauri/src/lib.rs)
+  ⎿  Added 1 line
+       9  #[cfg_attr(mobile, tauri::mobile_entry_point)]
+      10  pub fn run() {
+      11      tauri::Builder::default()
+      12 +        .plugin(tauri_plugin_dialog::init())                   
+      13          .setup(|app| {
+      14              let data_dir = app
+      15                  .path()
+
+⏺ Update(src-tauri/capabilities/default.json)
+  ⎿  Added 2 lines, removed 1 line
+       4    "description": "Default capability for the main window",
+       5    "windows": ["main"],
+       6    "permissions": [
+       7 -    "core:default"                                             
+       7 +    "core:default",                                            
+       8 +    "dialog:default"                                           
+       9    ]
+      10  }
+
+⏺ Now install the JS package.
+
+⏺ Bash(bun add @tauri-apps/plugin-dialog 2>&1)
+  ⎿  bun add v1.3.5 (1e86cebd)
+     Resolving dependencies
+     Resolved, downloaded and extracted [6]
+     … +5 lines (ctrl+o to expand)
+  ⎿  (timeout 30s)
+
+⏺ Now let me verify Rust compiles with the new dependency.
+
+⏺ Bash(cargo check --manifest-path src-tauri/Cargo.toml 2>&1)
+  ⎿      Updating crates.io index
+          Locking 4 packages to latest compatible versions
+           Adding rfd v0.16.0
+     … +36 lines (ctrl+o to expand)
+  ⎿  (timeout 2m)
+
+⏺ Now create export-utils.ts.
+
+⏺ Write(src/lib/export-utils.ts)
+  ⎿  Wrote 171 lines to src/lib/export-utils.ts
+       1 import type { Collection, Folder, SavedRequest } from "@/types/c
+         ollection";
+       2 import type {
+       3   HttpMethod,
+       4   HeaderEntry,
+       5   RequestBody,
+       6   RequestAuth,
+       7 } from "@/types/request";
+       8 import {
+       9   serializeHeaders,
+      10   serializeParams,
+     … +161 lines (ctrl+o to expand)
+
+⏺ Now add "Export as JSON" to collection context menu and "Copy as cURL" to
+  request context menu.
+
+⏺ Update(src/components/collections/TreeContextMenu.tsx)
+  ⎿  Added 2 lines
+      22    Trash2,
+      23    Copy,
+      24    ArrowRightLeft,
+      25 +  Download,                                                    
+      26 +  Terminal,                                                    
+      27  } from "lucide-react";
+      28  import { useState } from "react";
+      29  
+
+⏺ Now update collectionActions to accept onExport:
+
+⏺ Update(src/components/collections/TreeContextMenu.tsx)
+  ⎿  Added 11 lines, removed 1 line
+      113    onNewFolder,
+      114    onNewRequest,
+      115    onRename,
+      116 +  onExport,                                                   
+      117  }: {
+      118    onNewFolder: () => void;
+      119    onNewRequest: () => void;
+      120    onRename: () => void;
+      121 +  onExport?: () => void;                                      
+      122  }): ContextAction[] {
+      121 -  return [                                                    
+      123 +  const actions: ContextAction[] = [                          
+      124      {
+      125        label: "New Folder",
+      126        icon: <FolderPlus className="size-3.5" />,
+     ...
+      137        onClick: onRename,
+      138      },
+      139    ];
+      140 +  if (onExport) {                                             
+      141 +    actions.push({                                            
+      142 +      label: "Export as JSON",                                
+      143 +      icon: <Download className="size-3.5" />,                
+      144 +      onClick: onExport,                                      
+      145 +    });                                                       
+      146 +  }                                                           
+      147 +  return actions;                                             
+      148  }
+      149  
+      150  export function folderActions({
+
+⏺ Now update requestActions to add "Copy as cURL":
+
+⏺ Update(src/components/collections/TreeContextMenu.tsx)
+  ⎿  Added 11 lines, removed 1 line
+      179    onRename,
+      180    onDuplicate,
+      181    onMove,
+      182 +  onCopyAsCurl,                                               
+      183  }: {
+      184    onRename: () => void;
+      185    onDuplicate: () => void;
+      186    onMove: () => void;
+      187 +  onCopyAsCurl?: () => void;                                  
+      188  }): ContextAction[] {
+      187 -  return [                                                    
+      189 +  const actions: ContextAction[] = [                          
+      190      {
+      191        label: "Rename",
+      192        icon: <Pencil className="size-3.5" />,
+     ...
+      203        onClick: onMove,
+      204      },
+      205    ];
+      206 +  if (onCopyAsCurl) {                                         
+      207 +    actions.push({                                            
+      208 +      label: "Copy as cURL",                                  
+      209 +      icon: <Terminal className="size-3.5" />,                
+      210 +      onClick: onCopyAsCurl,                                  
+      211 +    });                                                       
+      212 +  }                                                           
+      213 +  return actions;                                             
+      214  }
+
+⏺ Now I need to find where collectionActions and requestActions are called to
+  pass the new callbacks. Let me check CollectionTree.tsx.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ I need to add the export and cURL callbacks to CollectionNode and
+  RequestSubNode. Let me add the imports and callbacks.
+
+⏺ Update(src/components/collections/CollectionTree.tsx)
+  ⎿  Added 3 lines
+      26  import { useTabStore } from "@/stores/tabStore";
+      27  import { useCollectionStore } from "@/stores/collectionStore";
+      28  import { buildTree } from "@/lib/tree-utils";
+      29 +import { exportCollectionToJson, requestToCurl } from "@/lib/ex
+         +port-utils";                                                   
+      30 +import { save } from "@tauri-apps/plugin-dialog";              
+      31 +import { invoke } from "@tauri-apps/api/core";                 
+      32  import type {
+      33    Collection,
+      34    Folder,
+
+⏺ Now add the export callback to CollectionNode:
+
+⏺ Update(src/components/collections/CollectionTree.tsx)
+  ⎿  Added 17 lines
+      119      });
+      120    }, [saveRequest, node.data.id]);
+      121  
+      122 +  const handleExport = useCallback(async () => {              
+      123 +    const store = useCollectionStore.getState();              
+      124 +    const json = exportCollectionToJson(                      
+      125 +      node.data,                                              
+      126 +      store.folders,                                          
+      127 +      store.requests,                                         
+      128 +    );                                                        
+      129 +    const path = await save({                                 
+      130 +      defaultPath: `${node.data.name}.json`,                  
+      131 +      filters: [{ name: "JSON", extensions: ["json"] }],      
+      132 +    });                                                       
+      133 +    if (path) {                                               
+      134 +      await invoke("write_file", { path, content: json });    
+      135 +    }                                                         
+      136 +  }, [node.data]);                                            
+      137 +                                                              
+      138    const actions = collectionActions({
+      139      onNewFolder: handleNewFolder,
+      140      onNewRequest: handleNewRequest,
+      141      onRename: () => setRenaming(true),
+      142 +    onExport: handleExport,                                   
+      143    });
+      144  
+      145    return (
+
+⏺ Now add the cURL copy callback to RequestSubNode:
+
+⏺ Update(src/components/collections/CollectionTree.tsx)
+  ⎿  Added 12 lines
+      290    const deleteSavedRequest = useCollectionStore((s) => s.delet
+           eSavedRequest);
+      291    const duplicateRequest = useCollectionStore((s) => s.duplica
+           teRequest);
+      292  
+      293 +  const handleCopyAsCurl = useCallback(async () => {          
+      294 +    const curl = requestToCurl(                               
+      295 +      node.data.method,                                       
+      296 +      node.data.url,                                          
+      297 +      node.data.headers,                                      
+      298 +      node.data.body,                                         
+      299 +      node.data.auth,                                         
+      300 +    );                                                        
+      301 +    await navigator.clipboard.writeText(curl);                
+      302 +  }, [node.data]);                                            
+      303 +                                                              
+      304    const actions = requestActions({
+      305      onRename: () => setRenaming(true),
+      306      onDuplicate: () => duplicateRequest(node.data.id),
+      307      onMove: () => onMoveRequest(node.data),
+      308 +    onCopyAsCurl: handleCopyAsCurl,                           
+      309    });
+      310  
+      311    return (
+
+⏺ Now add a cURL copy button to ResponseToolbar.
+
+⏺ Update(src/components/response/ResponseToolbar.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1  import { useState, useCallback } from "react";
+      2  import { Button } from "@/components/ui/button";
+      3 -import { Copy, Check, Code, Braces, Search, X } from "lucide-rea
+        -ct";                                                            
+      3 +import { Copy, Check, Code, Braces, Search, X, Terminal } from "
+        +lucide-react";                                                  
+      4  
+      5  interface ResponseToolbarProps {
+      6    body: string;
+
+⏺ Update(src/components/response/ResponseToolbar.tsx)
+  ⎿  Added 1 line
+      11    searchQuery: string;
+      12    onSearchQueryChange: (query: string) => void;
+      13    matchCount?: number;
+      14 +  onCopyAsCurl?: () => void;                                   
+      15  }
+      16  
+      17  export function ResponseToolbar({
+
+⏺ Update(src/components/response/ResponseToolbar.tsx)
+  ⎿  Added 1 line
+      23    searchQuery,
+      24    onSearchQueryChange,
+      25    matchCount,
+      26 +  onCopyAsCurl,                                                
+      27  }: ResponseToolbarProps) {
+      28    const [copied, setCopied] = useState(false);
+      29  
+
+⏺ Add the cURL button before the copy button.
+
+⏺ Update(src/components/response/ResponseToolbar.tsx)
+  ⎿  Added 6 lines
+      86          )}
+      87        </Button>
+      88  
+      89 +      {onCopyAsCurl && (                                       
+      90 +        <Button variant="ghost" size="icon-xs" onClick={onCopyA
+         +sCurl} title="Copy as cURL">                                   
+      91 +          <Terminal className="size-3.5" />                    
+      92 +        </Button>                                              
+      93 +      )}                                                       
+      94 +                                                               
+      95        <Button variant="ghost" size="icon-xs" onClick={handleCop
+          y}>
+      96          {copied ? (
+      97            <Check className="size-3.5 text-green-500" />
+
+⏺ Now I need to wire the onCopyAsCurl prop to ResponsePanel and then to App. Let
+   me check how ResponsePanel uses ResponseToolbar.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ I'll add onCopyAsCurl as a prop to ResponsePanel and pass it through.
+
+⏺ Update(src/components/response/ResponsePanel.tsx)
+  ⎿  Added 2 lines
+      35    response,
+      36    loading,
+      37    error,
+      38 +  onCopyAsCurl,                                                
+      39  }: {
+      40    response: HttpResponse | null;
+      41    loading: boolean;
+      42    error: string | null;
+      43 +  onCopyAsCurl?: () => void;                                   
+      44  }) {
+      45    const [viewMode, setViewMode] = useState<"pretty" | "raw">("p
+          retty");
+      46    const [searchVisible, setSearchVisible] = useState(false);
+
+⏺ Update(src/components/response/ResponsePanel.tsx)
+  ⎿  Added 1 line
+      119                  searchQuery={searchQuery}
+      120                  onSearchQueryChange={setSearchQuery}
+      121                  matchCount={matchCount}
+      122 +                onCopyAsCurl={onCopyAsCurl}                   
+      123                />
+      124                <span className="text-xs text-muted-foreground w
+           hitespace-nowrap">
+      125                  {formatSize(response.size_bytes)} · {response.
+           time_ms}ms
+
+⏺ Now wire it in App.tsx. I need to create a callback and pass it to
+  ResponsePanel.
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      26  import { Plus, Zap } from "lucide-react";
+      27  import { Button } from "@/components/ui/button";
+      28  import type { HistoryEntry } from "@/types/history";
+      29 +import { requestToCurl } from "@/lib/export-utils";            
+      30  
+      31  function EmptyState() {
+      32    const openNewTab = useTabStore((s) => s.openNewTab);
+
+⏺ Now add the cURL copy callback and pass to ResponsePanel. Let me find the
+  ResponsePanel rendering.
+
+⏺ Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 10 lines
+      361                response={activeTab.state.response}
+      362                loading={activeTab.state.loading}
+      363                error={activeTab.state.error}
+      364 +              onCopyAsCurl={() => {                           
+      365 +                const curl = requestToCurl(                   
+      366 +                  activeTab.state.method,                     
+      367 +                  activeTab.state.url,                        
+      368 +                  activeTab.state.headers,                    
+      369 +                  activeTab.state.bodyConfig,                 
+      370 +                  activeTab.state.auth,                       
+      371 +                );                                            
+      372 +                navigator.clipboard.writeText(curl);          
+      373 +              }}                                              
+      374              />
+      375            ) : (
+      376              <EmptyState />
+
+⏺ Build and test.
+
+⏺ Bash(bun run build 2>&1)
+  ⎿  $ tsc -b && vite build
+     vite v6.4.1 building for production...
+     transforming...
+     … +41 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+⏺ Bash(bun run test 2>&1)
+  ⎿  $ vitest run
+
+      RUN  v4.0.18 /Users/karthikvinayan/code/work/Hermes
+     … +33 lines (ctrl+o to expand)
+
+⏺ Commit Task 5.
+
+⏺ Bash(git add src/lib/export-utils.ts src-tauri/Cargo.toml src-tauri/Cargo.lock
+       src-tauri/src/lib.rs src-tauri/capabilities/default.json package.json
+      bun.lock src/com…)
+  ⎿ [main 470f4d5] feat(export): add Hermes JSON collection export and cURL
+     copy
+     12 files changed, 341 insertions(+), 4 deletions(-)
+     create mode 100644 src/lib/export-utils.ts
+
+
+⏺ Task 6: Import. Create the three parsers, the ImportDialog, and wire into
+  Sidebar. First install js-yaml.
+
+⏺ Bash(bun add js-yaml && bun add --dev @types/js-yaml 2>&1)
+  ⎿  bun add v1.3.5 (1e86cebd)
+
+     installed js-yaml@4.1.1 with binaries:
+     … +14 lines (ctrl+o to expand)
+
+⏺ Now create the three parsers and dialog. Let me do them all efficiently.
+
+⏺ Bash(mkdir -p src/lib/import)
+  ⎿  (No content)
+
+⏺ Write(src/lib/import/postman.ts)
+  ⎿  Wrote 140 lines to src/lib/import/postman.ts
+       1 import type { HttpMethod, HeaderEntry, ParamEntry, RequestBody, 
+         RequestAuth } from "@/types/request";
+       2 
+       3 export interface PostmanImport {
+       4   name: string;
+       5   description: string;
+       6   folders: { name: string; parentPath: string[] }[];
+       7   requests: {
+       8     name: string;
+       9     method: HttpMethod;
+      10     url: string;
+     … +130 lines (ctrl+o to expand)
+
+⏺ Write(src/lib/import/curl.ts)
+  ⎿  Wrote 177 lines to src/lib/import/curl.ts
+      1 import type { HttpMethod, HeaderEntry, RequestBody, RequestAuth }
+         from "@/types/request";
+      2 
+      3 export interface CurlImport {
+      4   method: HttpMethod;
+      5   url: string;
+      6   headers: HeaderEntry[];
+      7   body: RequestBody;
+      8   auth: RequestAuth;
+      9 }
+     … +167 lines (ctrl+o to expand)
+
+⏺ Write(src/lib/import/openapi.ts)
+  ⎿  Wrote 184 lines to src/lib/import/openapi.ts
+       1 import yaml from "js-yaml";
+       2 import type { HttpMethod, HeaderEntry, ParamEntry, RequestBody }
+          from "@/types/request";
+       3 
+       4 export interface OpenApiImport {
+       5   title: string;
+       6   version: string;
+       7   baseUrl: string;
+       8   endpoints: {
+       9     method: HttpMethod;
+      10     path: string;
+     … +174 lines (ctrl+o to expand)
+
+⏺ Now create the ImportDialog component.
+
+⏺ Write(src/components/import/ImportDialog.tsx)
+  ⎿  Wrote 298 lines to src/components/import/ImportDialog.tsx
+       1 import { useCallback, useState } from "react";
+       2 import {
+       3   Dialog,
+       4   DialogContent,
+       5   DialogHeader,
+       6   DialogTitle,
+       7 } from "@/components/ui/dialog";
+       8 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/comp
+         onents/ui/tabs";
+       9 import { Button } from "@/components/ui/button";
+      10 import { useCollectionStore } from "@/stores/collectionStore";
+     … +288 lines (ctrl+o to expand)
+
+⏺ Now add the Import button to the Sidebar Collections header and wire the
+  ImportDialog into App.tsx.
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 1 line, removed 1 line
+      1 -import { FolderClosed, Clock, Plus, Settings } from "lucide-reac
+        -t";                                                             
+      1 +import { FolderClosed, Clock, Plus, Settings, Import } from "luc
+        +ide-react";                                                     
+      2  import {
+      3    Sidebar as ShadcnSidebar,
+      4    SidebarContent,
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 1 line
+      30    onCreateCollection: () => void;
+      31    onOpenSettings: () => void;
+      32    onOpenHistoryEntry: (entry: HistoryEntry) => void;
+      33 +  onOpenImport: () => void;                                    
+      34  }
+      35  
+      36  export function Sidebar({
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 1 line
+      40    onCreateCollection,
+      41    onOpenSettings,
+      42    onOpenHistoryEntry,
+      43 +  onOpenImport,                                                
+      44  }: SidebarProps) {
+      45    return (
+      46      <ShadcnSidebar collapsible="icon">
+
+⏺ Add the import button next to the "+" in collections header.
+
+⏺ Update(src/components/layout/Sidebar.tsx)
+  ⎿  Added 18 lines, removed 8 lines
+      57              <FolderClosed className="size-3.5 mr-1" />
+      58              Collections
+      59            </SidebarGroupLabel>
+      60 -          <Tooltip>                                            
+      61 -            <TooltipTrigger asChild>                           
+      62 -              <SidebarGroupAction onClick={onCreateCollection}>
+      63 -                <Plus className="size-4" />                    
+      64 -              </SidebarGroupAction>                            
+      65 -            </TooltipTrigger>                                  
+      66 -            <TooltipContent side="right">New Collection</Toolti
+         -pContent>                                                      
+      67 -          </Tooltip>                                           
+      60 +          <div className="flex items-center gap-0.5 absolute ri
+         +ght-1 top-1/2 -translate-y-1/2">                               
+      61 +            <Tooltip>                                          
+      62 +              <TooltipTrigger asChild>                         
+      63 +                <button onClick={onOpenImport} className="size-
+         +5 flex items-center justify-center rounded-md text-sidebar-fore
+         +ground/50 hover:text-sidebar-foreground transition-colors">    
+      64 +                  <Import className="size-3.5" />              
+      65 +                </button>                                      
+      66 +              </TooltipTrigger>                                
+      67 +              <TooltipContent side="right">Import</TooltipConte
+         +nt>                                                            
+      68 +            </Tooltip>                                         
+      69 +            <Tooltip>                                          
+      70 +              <TooltipTrigger asChild>                         
+      71 +                <SidebarGroupAction onClick={onCreateCollection
+         +} className="static translate-y-0">                            
+      72 +                  <Plus className="size-4" />                  
+      73 +                </SidebarGroupAction>                          
+      74 +              </TooltipTrigger>                                
+      75 +              <TooltipContent side="right">New Collection</Tool
+         +tipContent>                                                    
+      76 +            </Tooltip>                                         
+      77 +          </div>                                               
+      78            <SidebarGroupContent>
+      79              {collections.length === 0 ? (
+      80                <div className="px-2 py-6 text-center">
+
+⏺ Now wire the ImportDialog into App.tsx.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+       9  import { SaveRequestDialog } from "@/components/collections/Sav
+          eRequestDialog";
+      10  import { EnvEditor } from "@/components/environments/EnvEditor"
+          ;
+      11  import { SettingsSheet } from "@/components/settings/SettingsSh
+          eet";
+      12 +import { ImportDialog } from "@/components/import/ImportDialog"
+         +;                                                              
+      13  import { useTabStore } from "@/stores/tabStore";
+      14  import { useCollectionStore } from "@/stores/collectionStore";
+      15  import { useEnvironmentStore } from "@/stores/environmentStore"
+          ;
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      81    const [showSaveRequest, setShowSaveRequest] = useState(false)
+          ;
+      82    const [showEnvEditor, setShowEnvEditor] = useState(false);
+      83    const [showSettings, setShowSettings] = useState(false);
+      84 +  const [showImport, setShowImport] = useState(false);         
+      85  
+      86    // Auto-save dirty tabs that are already persisted
+      87    useAutoSave();
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      300              onCreateCollection={() => setShowCreateCollection(
+           true)}
+      301              onOpenSettings={() => setShowSettings(true)}
+      302              onOpenHistoryEntry={handleOpenHistoryEntry}
+      303 +            onOpenImport={() => setShowImport(true)}          
+      304            />
+      305          }
+      306          tabBar={
+
+⏺ Add the ImportDialog component at the bottom of App.tsx.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 5 lines
+      400          open={showSettings}
+      401          onOpenChange={setShowSettings}
+      402        />
+      403 +                                                              
+      404 +      <ImportDialog                                           
+      405 +        open={showImport}                                     
+      406 +        onOpenChange={setShowImport}                          
+      407 +      />                                                      
+      408      </>
+      409    );
+      410  }
+
+⏺ Build and test.
+
+⏺ Bash(bun run build 2>&1)
+  ⎿  $ tsc -b && vite build
+     vite v6.4.1 building for production...
+     transforming...
+     … +41 lines (ctrl+o to expand)
+  ⎿  (timeout 1m)
+
+⏺ Bash(bun run test 2>&1)
+  ⎿  $ vitest run
+
+      RUN  v4.0.18 /Users/karthikvinayan/code/work/Hermes
+     … +33 lines (ctrl+o to expand)
+
+⏺ Commit Task 6.
+
+⏺ Bash(git add src/lib/import/ src/components/import/ImportDialog.tsx
+      src/components/layout/Sidebar.tsx src/App.tsx package.json bun.lock && git
+       commit -m "feat(import…)
+  ⎿ [main a1002c2] feat(import): add Postman, cURL, and OpenAPI import with
+     dialog UI
+     8 files changed, 834 insertions(+), 9 deletions(-)
+    … +4 lines (ctrl+o to expand)
+
+
+⏺ Task 7: Toast Notifications with sonner.
+
+⏺ Bash(bun add sonner 2>&1)
+  ⎿  bun add v1.3.5 (1e86cebd)
+     Resolving dependencies
+     Resolved, downloaded and extracted [4]
+     … +5 lines (ctrl+o to expand)
+
+⏺ Now get the shadcn Toaster wrapper pattern.
+
+⏺ Write(src/components/ui/sonner.tsx)
+  ⎿  Wrote 14 lines to src/components/ui/sonner.tsx
+       1 import { Toaster as SonnerToaster } from "sonner";
+       2 
+       3 export function Toaster() {
+       4   return (
+       5     <SonnerToaster
+       6       position="bottom-right"
+       7       toastOptions={{
+       8         className:
+       9           "bg-popover text-popover-foreground border-border shad
+         ow-lg text-xs",
+      10       }}
+     … +4 lines (ctrl+o to expand)
+
+⏺ Now add <Toaster /> to App.tsx and add toast calls to the relevant places.
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 1 line
+      10  import { EnvEditor } from "@/components/environments/EnvEditor"
+          ;
+      11  import { SettingsSheet } from "@/components/settings/SettingsSh
+          eet";
+      12  import { ImportDialog } from "@/components/import/ImportDialog"
+          ;
+      13 +import { Toaster } from "@/components/ui/sonner";              
+      14  import { useTabStore } from "@/stores/tabStore";
+      15  import { useCollectionStore } from "@/stores/collectionStore";
+      16  import { useEnvironmentStore } from "@/stores/environmentStore"
+          ;
+
+⏺ Update(src/App.tsx)
+  ⎿  Added 2 lines
+      406          open={showImport}
+      407          onOpenChange={setShowImport}
+      408        />
+      409 +                                                              
+      410 +      <Toaster />                                             
+      411      </>
+      412    );
+      413  }
+
+⏺ Now add toast calls to the various places. Let me add them to:
+  1. CollectionTree.tsx — export success, cURL copy
+  2. ImportDialog.tsx — import success/failure
+  3. SettingsSheet.tsx — clear history
+  4. ResponseToolbar cURL copy
+
+⏺ Update(src/components/collections/CollectionTree.tsx)
+  ⎿  Added 1 line
+      29  import { exportCollectionToJson, requestToCurl } from "@/lib/ex
+          port-utils";
+      30  import { save } from "@tauri-apps/plugin-dialog";
+      31  import { invoke } from "@tauri-apps/api/core";
+      32 +import { toast } from "sonner";                                
+      33  import type {
+      34    Collection,
+      35    Folder,
+
+⏺ Update(src/components/collections/CollectionTree.tsx)
+  ⎿  Added 1 line
+      133      });
+      134      if (path) {
+      135        await invoke("write_file", { path, content: json });
+      136 +      toast.success("Collection exported");                   
+      137      }
+      138    }, [node.data]);
+      139  
+
+⏺ Update(src/components/collections/CollectionTree.tsx)
+  ⎿  Added 1 line
+      301        node.data.auth,
+      302      );
+      303      await navigator.clipboard.writeText(curl);
+      304 +    toast.success("cURL copied to clipboard");                
+      305    }, [node.data]);
+      306  
+      307    const actions = requestActions({
+
+⏺ Now add toasts to ImportDialog.
+
+⏺ Update(src/components/import/ImportDialog.tsx)
+  ⎿  Added 1 line
+       9  import { Button } from "@/components/ui/button";
+      10  import { useCollectionStore } from "@/stores/collectionStore";
+      11  import { useTabStore } from "@/stores/tabStore";
+      12 +import { toast } from "sonner";                                
+      13  import { parsePostmanCollection, type PostmanImport } from "@/l
+          ib/import/postman";
+      14  import { parseCurl, type CurlImport } from "@/lib/import/curl";
+      15  import { parseOpenApi, type OpenApiImport } from "@/lib/import/
+          openapi";
+
+⏺ Add toast calls in the import handlers:
+
+⏺ Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/components/import/ImportDialog.tsx)
+  ⎿  Added 4 lines, removed 1 line
+      87          });
+      88        }
+      89  
+      90 +      toast.success(`Imported ${postmanData.requests.length} re
+         +quests from Postman`);                                         
+      91        onOpenChange(false);
+      92        resetState();
+      93      } catch (err) {
+      93 -      setPostmanError(err instanceof Error ? err.message : "Imp
+         -ort failed");                                                  
+      94 +      const msg = err instanceof Error ? err.message : "Import 
+         +failed";                                                       
+      95 +      setPostmanError(msg);                                    
+      96 +      toast.error(`Import failed: ${msg}`);                    
+      97      } finally {
+      98        setPostmanImporting(false);
+      99      }
+
+⏺ Update(src/components/import/ImportDialog.tsx)
+  ⎿  Added 1 line
+      124        store.setBodyConfig(curlData.body);
+      125        store.setAuth(curlData.auth);
+      126      }, 0);
+      127 +    toast.success("Request imported from cURL");              
+      128      onOpenChange(false);
+      129      resetState();
+      130    }, [curlData, onOpenChange]);
+  ⎿  Context limit reached · /compact or /clear to continue
+
+✻ Baked for 24m 4s
+
+❯ /compact 
+  ⎿  Error: Error during compaction: Error: Conversation too long. Press esc
+     twice to go up a few messages and try again.
+
+❯ /compact 
+  ⎿  Error: Error during compaction: Error: Conversation too long. Press esc
+     twice to go up a few messages and try again.
