@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useTabStore } from "@/stores/tabStore";
+import { toast } from "sonner";
 import { parsePostmanCollection, type PostmanImport } from "@/lib/import/postman";
 import { parseCurl, type CurlImport } from "@/lib/import/curl";
 import { parseOpenApi, type OpenApiImport } from "@/lib/import/openapi";
@@ -86,10 +87,13 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         });
       }
 
+      toast.success(`Imported ${postmanData.requests.length} requests from Postman`);
       onOpenChange(false);
       resetState();
-    } catch (err) {
-      setPostmanError(err instanceof Error ? err.message : "Import failed");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Import failed";
+      setPostmanError(msg);
+      toast.error(`Import failed: ${msg}`);
     } finally {
       setPostmanImporting(false);
     }
@@ -120,6 +124,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       store.setBodyConfig(curlData.body);
       store.setAuth(curlData.auth);
     }, 0);
+    toast.success("Request imported from cURL");
     onOpenChange(false);
     resetState();
   }, [curlData, onOpenChange]);
@@ -168,10 +173,13 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         });
       }
 
+      toast.success(`Imported ${openApiData.endpoints.length} endpoints from OpenAPI`);
       onOpenChange(false);
       resetState();
-    } catch (err) {
-      setOpenApiError(err instanceof Error ? err.message : "Import failed");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Import failed";
+      setOpenApiError(msg);
+      toast.error(`Import failed: ${msg}`);
     } finally {
       setOpenApiImporting(false);
     }

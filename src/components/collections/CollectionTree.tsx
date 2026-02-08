@@ -29,6 +29,7 @@ import { buildTree } from "@/lib/tree-utils";
 import { exportCollectionToJson, requestToCurl } from "@/lib/export-utils";
 import { save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import type {
   Collection,
   Folder,
@@ -132,6 +133,7 @@ function CollectionNode({
     });
     if (path) {
       await invoke("write_file", { path, content: json });
+      toast.success("Collection exported");
     }
   }, [node.data]);
 
@@ -299,6 +301,7 @@ function RequestSubNode({
       node.data.auth,
     );
     await navigator.clipboard.writeText(curl);
+    toast.success("cURL copied to clipboard");
   }, [node.data]);
 
   const actions = requestActions({

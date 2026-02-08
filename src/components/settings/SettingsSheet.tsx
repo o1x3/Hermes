@@ -21,7 +21,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { useSettingsStore, type Theme } from "@/stores/settingsStore";
+import { useHistoryStore } from "@/stores/historyStore";
 import { Sun, Moon, Monitor } from "lucide-react";
 
 interface SettingsSheetProps {
@@ -53,6 +55,8 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
   const handleClearHistory = useCallback(async () => {
     try {
       await invoke("clear_history");
+      useHistoryStore.getState().loadRecent();
+      toast.success("History cleared");
     } catch {
       // History commands may not exist yet
     }

@@ -10,6 +10,7 @@ import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
 import { EnvEditor } from "@/components/environments/EnvEditor";
 import { SettingsSheet } from "@/components/settings/SettingsSheet";
 import { ImportDialog } from "@/components/import/ImportDialog";
+import { Toaster } from "@/components/ui/sonner";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useEnvironmentStore } from "@/stores/environmentStore";
@@ -28,6 +29,7 @@ import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { HistoryEntry } from "@/types/history";
 import { requestToCurl } from "@/lib/export-utils";
+import { toast } from "sonner";
 
 function EmptyState() {
   const openNewTab = useTabStore((s) => s.openNewTab);
@@ -373,6 +375,7 @@ function App() {
                   activeTab.state.auth,
                 );
                 navigator.clipboard.writeText(curl);
+                toast.success("cURL copied to clipboard");
               }}
             />
           ) : (
@@ -405,6 +408,8 @@ function App() {
         open={showImport}
         onOpenChange={setShowImport}
       />
+
+      <Toaster />
     </>
   );
 }
