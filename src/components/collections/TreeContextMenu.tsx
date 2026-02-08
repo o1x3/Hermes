@@ -24,6 +24,8 @@ import {
   ArrowRightLeft,
   Download,
   Terminal,
+  Cloud,
+  CloudOff,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -114,11 +116,15 @@ export function collectionActions({
   onNewRequest,
   onRename,
   onExport,
+  onShare,
+  onUnshare,
 }: {
   onNewFolder: () => void;
   onNewRequest: () => void;
   onRename: () => void;
   onExport?: () => void;
+  onShare?: () => void;
+  onUnshare?: () => void;
 }): ContextAction[] {
   const actions: ContextAction[] = [
     {
@@ -142,6 +148,20 @@ export function collectionActions({
       label: "Export as JSON",
       icon: <Download className="size-3.5" />,
       onClick: onExport,
+    });
+  }
+  if (onShare) {
+    actions.push({
+      label: "Share with Team",
+      icon: <Cloud className="size-3.5" />,
+      onClick: onShare,
+    });
+  }
+  if (onUnshare) {
+    actions.push({
+      label: "Unshare",
+      icon: <CloudOff className="size-3.5" />,
+      onClick: onUnshare,
     });
   }
   return actions;

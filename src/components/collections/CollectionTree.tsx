@@ -1,5 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
-import { ChevronRight, FolderClosed, GripVertical } from "lucide-react";
+import { ChevronRight, FolderClosed, GripVertical, Cloud } from "lucide-react";
 import { DraggableTree, SortableItem } from "./DraggableTree";
 import {
   Collapsible,
@@ -41,12 +41,18 @@ interface CollectionTreeProps {
   collections: Collection[];
   folders: Folder[];
   requests: SavedRequest[];
+  onShareCollection?: (collectionId: string) => void;
+  onUnshareCollection?: (collectionId: string) => void;
+  isAuthenticated?: boolean;
 }
 
 export function CollectionTree({
   collections,
   folders,
   requests,
+  onShareCollection,
+  onUnshareCollection,
+  isAuthenticated,
 }: CollectionTreeProps) {
   const tree = useMemo(
     () => buildTree(collections, folders, requests),
@@ -71,6 +77,9 @@ export function CollectionTree({
                 key={node.data.id}
                 node={node}
                 onMoveRequest={setMoveTarget}
+                onShareCollection={onShareCollection}
+                onUnshareCollection={onUnshareCollection}
+                isAuthenticated={isAuthenticated}
               />
             );
           })}
@@ -91,9 +100,15 @@ export function CollectionTree({
 function CollectionNode({
   node,
   onMoveRequest,
+  onShareCollection,
+  onUnshareCollection,
+  isAuthenticated,
 }: {
   node: Extract<TreeNode, { type: "collection" }>;
   onMoveRequest: (req: SavedRequest) => void;
+  onShareCollection?: (collectionId: string) => void;
+  onUnshareCollection?: (collectionId: string) => void;
+  isAuthenticated?: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
   const updateCollection = useCollectionStore((s) => s.updateCollection);
@@ -137,11 +152,18 @@ function CollectionNode({
     }
   }, [node.data]);
 
+  const isSynced = !!node.data.cloudId;
   const actions = collectionActions({
     onNewFolder: handleNewFolder,
     onNewRequest: handleNewRequest,
     onRename: () => setRenaming(true),
     onExport: handleExport,
+    onShare: isAuthenticated && !isSynced && onShareCollection
+      ? () => onShareCollection(node.data.id)
+      : undefined,
+    onUnshare: isSynced && onUnshareCollection
+      ? () => onUnshareCollection(node.data.id)
+      : undefined,
   });
 
   return (
@@ -165,7 +187,10 @@ function CollectionNode({
                   onCancel={() => setRenaming(false)}
                 />
               ) : (
-                <span className="truncate">{node.data.name}</span>
+                <span className="truncate flex items-center gap-1">
+                  {node.data.name}
+                  {isSynced && <Cloud className="size-3 text-blue-500 shrink-0" />}
+                </span>
               )}
             </SidebarMenuButton>
           </CollapsibleTrigger>
