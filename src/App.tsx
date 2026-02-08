@@ -9,6 +9,7 @@ import { CreateCollectionDialog } from "@/components/collections/CreateCollectio
 import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
 import { EnvEditor } from "@/components/environments/EnvEditor";
 import { SettingsSheet } from "@/components/settings/SettingsSheet";
+import { ImportDialog } from "@/components/import/ImportDialog";
 import { useTabStore } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useEnvironmentStore } from "@/stores/environmentStore";
@@ -80,6 +81,7 @@ function App() {
   const [showSaveRequest, setShowSaveRequest] = useState(false);
   const [showEnvEditor, setShowEnvEditor] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   // Auto-save dirty tabs that are already persisted
   useAutoSave();
@@ -298,6 +300,7 @@ function App() {
             onCreateCollection={() => setShowCreateCollection(true)}
             onOpenSettings={() => setShowSettings(true)}
             onOpenHistoryEntry={handleOpenHistoryEntry}
+            onOpenImport={() => setShowImport(true)}
           />
         }
         tabBar={
@@ -396,6 +399,11 @@ function App() {
       <SettingsSheet
         open={showSettings}
         onOpenChange={setShowSettings}
+      />
+
+      <ImportDialog
+        open={showImport}
+        onOpenChange={setShowImport}
       />
     </>
   );

@@ -1,4 +1,4 @@
-import { FolderClosed, Clock, Plus, Settings } from "lucide-react";
+import { FolderClosed, Clock, Plus, Settings, Import } from "lucide-react";
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -30,6 +30,7 @@ interface SidebarProps {
   onCreateCollection: () => void;
   onOpenSettings: () => void;
   onOpenHistoryEntry: (entry: HistoryEntry) => void;
+  onOpenImport: () => void;
 }
 
 export function Sidebar({
@@ -39,6 +40,7 @@ export function Sidebar({
   onCreateCollection,
   onOpenSettings,
   onOpenHistoryEntry,
+  onOpenImport,
 }: SidebarProps) {
   return (
     <ShadcnSidebar collapsible="icon">
@@ -55,14 +57,24 @@ export function Sidebar({
             <FolderClosed className="size-3.5 mr-1" />
             Collections
           </SidebarGroupLabel>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <SidebarGroupAction onClick={onCreateCollection}>
-                <Plus className="size-4" />
-              </SidebarGroupAction>
-            </TooltipTrigger>
-            <TooltipContent side="right">New Collection</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-0.5 absolute right-1 top-1/2 -translate-y-1/2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={onOpenImport} className="size-5 flex items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors">
+                  <Import className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Import</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarGroupAction onClick={onCreateCollection} className="static translate-y-0">
+                  <Plus className="size-4" />
+                </SidebarGroupAction>
+              </TooltipTrigger>
+              <TooltipContent side="right">New Collection</TooltipContent>
+            </Tooltip>
+          </div>
           <SidebarGroupContent>
             {collections.length === 0 ? (
               <div className="px-2 py-6 text-center">
