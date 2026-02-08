@@ -13,21 +13,6 @@ pub struct SyncQueueEntry {
     pub last_error: Option<String>,
 }
 
-pub fn enqueue(
-    conn: &Connection,
-    table_name: &str,
-    local_id: &str,
-    operation: &str,
-    payload: Option<&str>,
-) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO sync_queue (table_name, local_id, operation, payload) VALUES (?1, ?2, ?3, ?4)",
-        params![table_name, local_id, operation, payload],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
 pub fn get_pending(conn: &Connection, limit: i32) -> Result<Vec<SyncQueueEntry>, String> {
     let mut stmt = conn
         .prepare(
@@ -60,20 +45,3 @@ pub fn remove(conn: &Connection, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-pub fn mark_failed(conn: &Connection, id: i64, error: &str) -> Result<(), String> {
-    conn.execute(
-        "UPDATE sync_queue SET retry_count = retry_count + 1, last_error = ?1 WHERE id = ?2",
-        params![error, id],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub fn clear_for_item(conn: &Connection, table_name: &str, local_id: &str) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM sync_queue WHERE table_name = ?1 AND local_id = ?2",
-        params![table_name, local_id],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
