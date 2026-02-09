@@ -1,44 +1,100 @@
+import { useCallback, useRef } from "react";
+import { useSidebarStore } from "@/stores/sidebarStore";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-import {
-  SidebarProvider,
-  SidebarInset,
-} from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
+
+function SidebarResizeHandle() {
+  const setWidth = useSidebarStore((s) => s.setWidth);
+  const width = useSidebarStore((s) => s.width);
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    startX.current = e.clientX;
+    startWidth.current = width;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [width]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging.current) return;
+    const delta = e.clientX - startX.current;
+    const newWidth = startWidth.current + delta;
+    setWidth(newWidth);
+  }, [setWidth]);
+
+  const handleMouseUp = useCallback(() => {
+    isDragging.current = false;
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, [handleMouseMove]);
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize group z-10"
+    >
+      <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-border/50 group-hover:bg-primary/50 transition-colors" />
+    </div>
+  );
+}
 
 export function AppShell({
-  sidebar,
+  miniSidebar,
+  mainSidebar,
   titlebar,
   urlBar,
   requestConfig,
   responsePanel,
 }: {
-  sidebar: React.ReactNode;
+  miniSidebar: React.ReactNode;
+  mainSidebar: React.ReactNode;
   titlebar?: React.ReactNode;
   urlBar: React.ReactNode;
   requestConfig: React.ReactNode;
   responsePanel: React.ReactNode;
 }) {
+  const expanded = useSidebarStore((s) => s.expanded);
+  const width = useSidebarStore((s) => s.width);
+
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden">
-      {titlebar}
-      <SidebarProvider className="flex-1 min-h-0 overflow-hidden">
-        {sidebar}
-        <SidebarInset className="min-w-0 flex flex-col overflow-hidden">
-          {/* URL bar - fixed height, outside resize */}
+    <SidebarProvider className="h-screen w-screen overflow-hidden">
+      <div className="flex h-full w-full">
+        {miniSidebar}
+
+        {expanded && (
+          <div
+            className="relative shrink-0 border-r border-sidebar-border"
+            style={{ width }}
+          >
+            {mainSidebar}
+            <SidebarResizeHandle />
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0 flex flex-col">
+          {titlebar}
+
           <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
             {urlBar}
           </div>
 
-          {/* Request / Response horizontal split */}
           <ResizablePanelGroup
             orientation="horizontal"
             id="hermes-request-response"
             className="flex-1 min-h-0"
           >
-            {/* Request config panel */}
             <ResizablePanel defaultSize="50%" minSize="25%" id="request">
               <div className="h-full overflow-hidden">
                 {requestConfig}
@@ -47,13 +103,12 @@ export function AppShell({
 
             <ResizableHandle withHandle />
 
-            {/* Response panel */}
             <ResizablePanel defaultSize="50%" minSize="25%" id="response">
               {responsePanel}
             </ResizablePanel>
           </ResizablePanelGroup>
-        </SidebarInset>
-      </SidebarProvider>
-    </div>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }

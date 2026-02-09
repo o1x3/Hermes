@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { MiniSidebar } from "@/components/layout/MiniSidebar";
+import { MainSidebar } from "@/components/layout/MainSidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
 import { UrlBar } from "@/components/request/UrlBar";
 import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
@@ -365,21 +366,24 @@ function App() {
   return (
     <>
       <AppShell
-        sidebar={
-          <Sidebar
+        miniSidebar={
+          <MiniSidebar
+            onOpenSettings={() => setShowSettings(true)}
+            onCreateTeam={() => setShowCreateTeam(true)}
+          />
+        }
+        mainSidebar={
+          <MainSidebar
             collections={collections}
             folders={folders}
             requests={requests}
             onCreateCollection={() => setShowCreateCollection(true)}
-            onOpenSettings={() => setShowSettings(true)}
             onOpenHistoryEntry={handleOpenHistoryEntry}
             onOpenImport={() => setShowImport(true)}
             isAuthenticated={isAuthenticated}
-            onSignIn={() => setShowAuth(true)}
-            onCreateTeam={() => setShowCreateTeam(true)}
             activeTeamId={activeTeamId}
             teams={teams}
-            onShareCollection={(id) => setShareCollectionId(id)}
+            onShareCollection={(id: string) => setShareCollectionId(id)}
             onUnshareCollection={handleUnshareCollection}
           />
         }
