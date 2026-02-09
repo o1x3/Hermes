@@ -112,24 +112,11 @@ export function Titlebar({ onManageEnvironments, onOpenSettings }: TitlebarProps
       data-tauri-drag-region
       className="titlebar flex h-10 shrink-0 items-stretch bg-background border-b border-border select-none"
     >
-      {/* Left: traffic light padding (macOS) + workspace name */}
-      <div
-        data-tauri-drag-region
-        className={cn(
-          "flex items-center shrink-0 border-r border-border",
-          isMac ? "pl-[78px] pr-3" : "pl-3 pr-3",
-        )}
-      >
-        <span
-          data-tauri-drag-region
-          className="text-xs font-semibold text-foreground tracking-wide uppercase"
-        >
-          Hermes
-        </span>
-      </div>
-
       {/* Center: request tabs */}
-      <div className="flex items-stretch flex-1 min-w-0 overflow-x-auto titlebar-tabs">
+      <div className={cn(
+        "flex items-stretch flex-1 min-w-0 overflow-x-auto titlebar-tabs",
+        isMac && "pl-[68px]",
+      )}>
         {tabs.map((tab) => (
           <TabItem key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
         ))}

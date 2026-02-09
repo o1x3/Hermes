@@ -6,13 +6,10 @@ describe("App", () => {
   it("renders the app shell with sidebar and collections", async () => {
     render(<App />);
 
-    // Sidebar branding (appears in both titlebar and sidebar)
     await waitFor(() => {
-      expect(screen.getAllByText("Hermes").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Collections")).toBeInTheDocument();
     });
 
-    // Section labels
-    expect(screen.getByText("Collections")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
     expect(screen.getByText("No history yet")).toBeInTheDocument();
   });
