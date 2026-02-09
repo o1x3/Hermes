@@ -27,28 +27,28 @@ export function AppShell({
       <SidebarProvider className="flex-1 min-h-0 overflow-hidden">
         {sidebar}
         <SidebarInset className="min-w-0 flex flex-col overflow-hidden">
-          {/* Request / Response split */}
+          {/* URL bar - fixed height, outside resize */}
+          <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
+            {urlBar}
+          </div>
+
+          {/* Request / Response horizontal split */}
           <ResizablePanelGroup
-            orientation="vertical"
+            orientation="horizontal"
             id="hermes-request-response"
             className="flex-1 min-h-0"
           >
-            {/* Request panel: URL bar + config tabs */}
-            <ResizablePanel defaultSize="45%" minSize="20%" id="request">
-              <div className="flex h-full flex-col">
-                <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
-                  {urlBar}
-                </div>
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  {requestConfig}
-                </div>
+            {/* Request config panel */}
+            <ResizablePanel defaultSize="50%" minSize="25%" id="request">
+              <div className="h-full overflow-hidden">
+                {requestConfig}
               </div>
             </ResizablePanel>
 
-            <ResizableHandle />
+            <ResizableHandle withHandle />
 
             {/* Response panel */}
-            <ResizablePanel defaultSize="55%" minSize="20%" id="response">
+            <ResizablePanel defaultSize="50%" minSize="25%" id="response">
               {responsePanel}
             </ResizablePanel>
           </ResizablePanelGroup>
