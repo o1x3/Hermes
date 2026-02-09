@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import { X, Plus, MoreHorizontal, Minus, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTabStore, type Tab } from "@/stores/tabStore";
@@ -106,29 +107,56 @@ export function Titlebar({ onManageEnvironments, onOpenSettings }: TitlebarProps
   const openNewTab = useTabStore((s) => s.openNewTab);
   const platform = usePlatform();
   const isMac = platform === "macos";
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const updateFadeState = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setShowLeftFade(el.scrollLeft > 0);
+    setShowRightFade(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+  };
+
+  useEffect(() => {
+    updateFadeState();
+  }, [tabs.length]);
 
   return (
     <div
       data-tauri-drag-region
       className="titlebar flex h-10 shrink-0 items-stretch bg-background border-b border-border select-none"
     >
-      {/* Center: request tabs */}
-      <div className={cn(
-        "flex items-stretch flex-1 min-w-0 overflow-x-auto titlebar-tabs",
-        isMac && "pl-[68px]",
-      )}>
-        {tabs.map((tab) => (
-          <TabItem key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
-        ))}
-        <button
-          className="flex items-center justify-center px-2.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
-          onClick={openNewTab}
-          title="New Tab (Cmd+T)"
+      <div className="relative flex items-stretch flex-1 min-w-0">
+        <div
+          ref={scrollRef}
+          onScroll={updateFadeState}
+          className="flex items-stretch flex-1 min-w-0 overflow-x-auto titlebar-tabs"
         >
-          <Plus className="size-3.5" />
-        </button>
-        {/* Drag region filler */}
-        <div data-tauri-drag-region className="flex-1" />
+          {tabs.map((tab) => (
+            <TabItem key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
+          ))}
+          <button
+            className="flex items-center justify-center px-2.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+            onClick={openNewTab}
+            title="New Tab (Cmd+T)"
+          >
+            <Plus className="size-3.5" />
+          </button>
+          <div data-tauri-drag-region className="flex-1" />
+        </div>
+        <div
+          className={cn(
+            "pointer-events-none absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background to-transparent transition-opacity",
+            showLeftFade ? "opacity-100" : "opacity-0",
+          )}
+        />
+        <div
+          className={cn(
+            "pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background to-transparent transition-opacity",
+            showRightFade ? "opacity-100" : "opacity-0",
+          )}
+        />
       </div>
 
       {/* Right: env switcher + more menu + window controls */}
