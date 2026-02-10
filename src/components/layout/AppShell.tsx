@@ -86,7 +86,7 @@ export function AppShell({
         <div className="flex-1 min-w-0 flex flex-col">
           {titlebar}
 
-          <div className="shrink-0 bg-card border-b border-border px-5 py-3.5">
+          <div className="shrink-0 bg-muted/10 border-b border-border px-5 py-3.5">
             {urlBar}
           </div>
 
