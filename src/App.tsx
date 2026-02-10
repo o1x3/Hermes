@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppShell } from "@/components/layout/AppShell";
 import { MiniSidebar } from "@/components/layout/MiniSidebar";
 import { MainSidebar } from "@/components/layout/MainSidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
@@ -8,16 +7,16 @@ import { RequestConfigTabs } from "@/components/request/RequestConfigTabs";
 import { ResponsePanel } from "@/components/response/ResponsePanel";
 import { CreateCollectionDialog } from "@/components/collections/CreateCollectionDialog";
 import { SaveRequestDialog } from "@/components/collections/SaveRequestDialog";
-import { EnvEditor } from "@/components/environments/EnvEditor";
-import { SettingsSheet } from "@/components/settings/SettingsSheet";
 import { ImportDialog } from "@/components/import/ImportDialog";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { CreateTeamDialog } from "@/components/teams/CreateTeamDialog";
 import { InviteDialog } from "@/components/teams/InviteDialog";
 import { MembersList } from "@/components/teams/MembersList";
 import { ShareCollectionDialog } from "@/components/teams/ShareCollectionDialog";
+import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { EnvironmentsPanel } from "@/components/environments/EnvironmentsPanel";
 import { Toaster } from "@/components/ui/sonner";
-import { useTabStore } from "@/stores/tabStore";
+import { useTabStore, isRequestTab } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { useEnvironmentStore } from "@/stores/environmentStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -93,27 +92,21 @@ function App() {
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const loadHistory = useHistoryStore((s) => s.loadRecent);
 
-  // Auth state
   const user = useAuthStore((s) => s.user);
   const initialized = useAuthStore((s) => s.initialized);
   const initializeAuth = useAuthStore((s) => s.initializeAuth);
 
-  // Team state
   const teams = useTeamStore((s) => s.teams);
   const activeTeamId = useTeamStore((s) => s.activeTeamId);
   const loadTeams = useTeamStore((s) => s.loadTeams);
   const loadPendingInvitations = useTeamStore((s) => s.loadPendingInvitations);
   const clearTeamData = useTeamStore((s) => s.clearTeamData);
 
-  // Sync state
   const startSync = useSyncStore((s) => s.startSync);
   const stopSync = useSyncStore((s) => s.stopSync);
 
-  // Dialog state
   const [showCreateCollection, setShowCreateCollection] = useState(false);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
-  const [showEnvEditor, setShowEnvEditor] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -123,15 +116,12 @@ function App() {
 
   const isAuthenticated = !!user;
 
-  // Auto-save dirty tabs that are already persisted
   useAutoSave();
 
-  // Initialize auth on mount
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
 
-  // Set up auth state change listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -148,7 +138,6 @@ function App() {
     return () => subscription.unsubscribe();
   }, [loadTeams, loadPendingInvitations, startSync, stopSync, clearTeamData]);
 
-  // Load teams after auth initialization
   useEffect(() => {
     if (initialized && user) {
       loadTeams();
@@ -157,23 +146,19 @@ function App() {
     }
   }, [initialized, user, loadTeams, loadPendingInvitations, startSync]);
 
-  // Load workspace, settings, and history on mount
   useEffect(() => {
     loadWorkspace();
     loadSettings();
     loadHistory();
 
-    // Cleanup old history based on retention setting
     const { historyRetentionDays } = useSettingsStore.getState();
     invoke("cleanup_old_history", { retentionDays: historyRetentionDays }).catch(() => {});
   }, [loadWorkspace, loadSettings, loadHistory]);
 
-  // Open a default tab if none exist on initial load
   useEffect(() => {
     if (tabs.length === 0) {
       openNewTab();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleOpenHistoryEntry = useCallback(
@@ -187,14 +172,15 @@ function App() {
     cmContent?.focus();
   }, []);
 
-  // Build variable scope for the active tab
   const variableScopeContext = useMemo(() => {
     const globalEnv = environments.find((e) => e.isGlobal);
     const activeEnv = activeEnvironmentId
       ? environments.find((e) => e.id === activeEnvironmentId)
       : undefined;
 
-    if (!activeTab) return { scope: new Map<string, string>(), globalEnv, activeEnv };
+    if (!activeTab || !isRequestTab(activeTab)) {
+      return { scope: new Map<string, string>(), globalEnv, activeEnv };
+    }
 
     const savedReq = activeTab.savedRequestId
       ? useCollectionStore.getState().getRequest(activeTab.savedRequestId)
@@ -250,7 +236,7 @@ function App() {
 
   const handleSend = useCallback(() => {
     const tab = useTabStore.getState().getActiveTab();
-    if (!tab) return;
+    if (!tab || !isRequestTab(tab)) return;
 
     const resolveAuth = () => {
       const { auth } = tab.state;
@@ -286,7 +272,7 @@ function App() {
 
   const handleSave = useCallback(async () => {
     const tab = useTabStore.getState().getActiveTab();
-    if (!tab) return;
+    if (!tab || !isRequestTab(tab)) return;
 
     if (tab.savedRequestId) {
       const updateReq = useCollectionStore.getState().updateSavedRequest;
@@ -326,7 +312,8 @@ function App() {
   }, [setActiveTab]);
 
   const inheritedAuth = useMemo(() => {
-    if (!activeTab || activeTab.state.auth.type !== "none" || !activeTab.savedRequestId) {
+    if (!activeTab || !isRequestTab(activeTab)) return null;
+    if (activeTab.state.auth.type !== "none" || !activeTab.savedRequestId) {
       return null;
     }
     const req = useCollectionStore.getState().getRequest(activeTab.savedRequestId);
@@ -358,8 +345,8 @@ function App() {
     const snapshot = useUndoStore.getState().pop();
     if (!snapshot) return;
 
-    const activeTabId = useTabStore.getState().activeTabId;
-    if (snapshot.tabId !== activeTabId) {
+    const currentTabId = useTabStore.getState().activeTabId;
+    if (snapshot.tabId !== currentTabId) {
       toast.error("Cannot undo: tab has changed");
       return;
     }
@@ -377,7 +364,7 @@ function App() {
   const handleCurlDetected = useCallback(
     (parsed: CurlImport) => {
       const tab = useTabStore.getState().getActiveTab();
-      if (!tab) return;
+      if (!tab || !isRequestTab(tab)) return;
 
       useUndoStore.getState().push({
         label: "cURL import",
@@ -434,40 +421,24 @@ function App() {
   });
 
   const hasActiveTab = !!activeTab;
+  const isActiveRequestTab = activeTab && isRequestTab(activeTab);
+  const isActiveSettingsTab = activeTab?.type === "settings";
+  const isActiveEnvironmentsTab = activeTab?.type === "environments";
 
-  return (
-    <>
-      <AppShell
-        miniSidebar={
-          <MiniSidebar
-            onOpenSettings={() => setShowSettings(true)}
-            onCreateTeam={() => setShowCreateTeam(true)}
-          />
-        }
-        mainSidebar={
-          <MainSidebar
-            collections={collections}
-            folders={folders}
-            requests={requests}
-            onCreateCollection={() => setShowCreateCollection(true)}
-            onOpenHistoryEntry={handleOpenHistoryEntry}
-            onOpenImport={() => setShowImport(true)}
-            isAuthenticated={isAuthenticated}
-            activeTeamId={activeTeamId}
-            teams={teams}
-            onShareCollection={(id: string) => setShareCollectionId(id)}
-            onUnshareCollection={handleUnshareCollection}
-          />
-        }
-        titlebar={
-          <Titlebar
-            onManageEnvironments={() => setShowEnvEditor(true)}
-            onOpenSettings={() => setShowSettings(true)}
-          />
-        }
-        urlBar={
-          hasActiveTab ? (
-            <div>
+  const renderMainContent = () => {
+    if (isActiveSettingsTab) {
+      return <SettingsPanel />;
+    }
+
+    if (isActiveEnvironmentsTab) {
+      return <EnvironmentsPanel />;
+    }
+
+    return (
+      <>
+        {isActiveRequestTab && (
+          <>
+            <div className="shrink-0 bg-muted/10 border-b border-border px-5 py-3.5">
               {activeTab.readOnly && (
                 <div className="bg-muted/50 px-4 py-2 flex items-center justify-between text-xs border-b border-border mb-2 rounded-md">
                   <span className="text-muted-foreground">
@@ -497,50 +468,79 @@ function App() {
                 onCurlError={handleCurlError}
               />
             </div>
-          ) : null
-        }
-        requestConfig={
-          hasActiveTab ? (
-            <RequestConfigTabs
-              params={activeTab.state.params}
-              headers={activeTab.state.headers}
-              auth={activeTab.state.auth}
-              bodyConfig={activeTab.state.bodyConfig}
-              onParamsChange={setParams}
-              onHeadersChange={setHeaders}
-              onAuthChange={setAuth}
-              onBodyConfigChange={setBodyConfig}
-              onBodyTypeChange={setBodyType}
-              inheritedAuth={inheritedAuth}
-              variableItems={getVariableItems}
-              isVariableResolved={isVariableResolved}
-              disabled={activeTab.readOnly}
-            />
-          ) : null
-        }
-        responsePanel={
-          hasActiveTab ? (
-            <ResponsePanel
-              response={activeTab.state.response}
-              loading={activeTab.state.loading}
-              error={activeTab.state.error}
-              onCopyAsCurl={() => {
-                const curl = requestToCurl(
-                  activeTab.state.method,
-                  activeTab.state.url,
-                  activeTab.state.headers,
-                  activeTab.state.bodyConfig,
-                  activeTab.state.auth,
-                );
-                navigator.clipboard.writeText(curl);
-                toast.success("cURL copied to clipboard");
-              }}
-            />
-          ) : (
-            <EmptyState />
-          )
-        }
-      />
+            <div className="flex-1 min-h-0 flex">
+              <div className="w-1/2 min-w-0 border-r border-border overflow-hidden">
+                <RequestConfigTabs
+                  params={activeTab.state.params}
+                  headers={activeTab.state.headers}
+                  auth={activeTab.state.auth}
+                  bodyConfig={activeTab.state.bodyConfig}
+                  onParamsChange={setParams}
+                  onHeadersChange={setHeaders}
+                  onAuthChange={setAuth}
+                  onBodyConfigChange={setBodyConfig}
+                  onBodyTypeChange={setBodyType}
+                  inheritedAuth={inheritedAuth}
+                  variableItems={getVariableItems}
+                  isVariableResolved={isVariableResolved}
+                  disabled={activeTab.readOnly}
+                />
+              </div>
+              <div className="w-1/2 min-w-0 overflow-hidden">
+                <ResponsePanel
+                  response={activeTab.state.response}
+                  loading={activeTab.state.loading}
+                  error={activeTab.state.error}
+                  onCopyAsCurl={() => {
+                    const curl = requestToCurl(
+                      activeTab.state.method,
+                      activeTab.state.url,
+                      activeTab.state.headers,
+                      activeTab.state.bodyConfig,
+                      activeTab.state.auth,
+                    );
+                    navigator.clipboard.writeText(curl);
+                    toast.success("cURL copied to clipboard");
+                  }}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        {!hasActiveTab && <EmptyState />}
+      </>
+    );
+  };
+
+  return (
+    <>
+      <div className="h-screen w-screen flex">
+        <MiniSidebar
+          onOpenSettings={() => {}}
+          onCreateTeam={() => setShowCreateTeam(true)}
+        />
+
+        <MainSidebar
+          collections={collections}
+          folders={folders}
+          requests={requests}
+          onCreateCollection={() => setShowCreateCollection(true)}
+          onOpenHistoryEntry={handleOpenHistoryEntry}
+          onOpenImport={() => setShowImport(true)}
+          isAuthenticated={isAuthenticated}
+          activeTeamId={activeTeamId}
+          teams={teams}
+          onShareCollection={(id: string) => setShareCollectionId(id)}
+          onUnshareCollection={handleUnshareCollection}
+        />
+
+        <div className="flex-1 min-w-0 flex flex-col">
+          <Titlebar />
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {renderMainContent()}
+          </div>
+        </div>
+      </div>
 
       <CreateCollectionDialog
         open={showCreateCollection}
@@ -550,16 +550,6 @@ function App() {
       <SaveRequestDialog
         open={showSaveRequest}
         onOpenChange={setShowSaveRequest}
-      />
-
-      <EnvEditor
-        open={showEnvEditor}
-        onOpenChange={setShowEnvEditor}
-      />
-
-      <SettingsSheet
-        open={showSettings}
-        onOpenChange={setShowSettings}
       />
 
       <ImportDialog

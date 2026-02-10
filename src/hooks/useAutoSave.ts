@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useTabStore } from "@/stores/tabStore";
+import { useTabStore, isRequestTab } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 
 const AUTO_SAVE_DELAY = 2000;
@@ -15,8 +15,12 @@ export function useAutoSave() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Only auto-save tabs that are already saved (have a savedRequestId) and are dirty
-    if (!activeTab || !activeTab.savedRequestId || !isTabDirty) {
+    if (
+      !activeTab ||
+      !isRequestTab(activeTab) ||
+      !activeTab.savedRequestId ||
+      !isTabDirty
+    ) {
       return;
     }
 
@@ -25,7 +29,7 @@ export function useAutoSave() {
     }
 
     timerRef.current = setTimeout(async () => {
-      if (!activeTab.savedRequestId) return;
+      if (!isRequestTab(activeTab) || !activeTab.savedRequestId) return;
 
       try {
         await updateSavedRequest(activeTab.savedRequestId, {

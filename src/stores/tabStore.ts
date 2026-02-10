@@ -48,14 +48,32 @@ export interface TabRequestState {
   error: string | null;
 }
 
-export interface Tab {
+export type Tab = RequestTab | SettingsTab | EnvironmentsTab;
+
+interface BaseTab {
   id: string;
+  title: string;
+}
+
+export interface RequestTab extends BaseTab {
+  type: "request";
   savedRequestId: string | null;
   historyEntryId: string | null;
   readOnly: boolean;
-  title: string;
   state: TabRequestState;
   savedSnapshot: TabRequestState | null;
+}
+
+export interface SettingsTab extends BaseTab {
+  type: "settings";
+}
+
+export interface EnvironmentsTab extends BaseTab {
+  type: "environments";
+}
+
+export function isRequestTab(tab: Tab): tab is RequestTab {
+  return tab.type === "request";
 }
 
 function defaultTabState(): TabRequestState {
@@ -96,7 +114,6 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
-/** Compare two TabRequestStates ignoring transient fields (response, loading, error) */
 function stateEqual(a: TabRequestState, b: TabRequestState): boolean {
   return (
     a.method === b.method &&
@@ -112,15 +129,15 @@ interface TabState {
   tabs: Tab[];
   activeTabId: string | null;
 
-  // Tab lifecycle
   openNewTab: () => void;
   openSavedRequest: (request: SavedRequest) => void;
   openHistoryEntry: (entry: HistoryEntry) => void;
+  openSettingsTab: () => void;
+  openEnvironmentsTab: () => void;
   restoreFromHistory: () => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
 
-  // Active tab mutations
   setMethod: (method: HttpMethod) => void;
   setUrl: (url: string, source?: "params" | "url") => void;
   setHeaders: (headers: HeaderEntry[]) => void;
@@ -130,27 +147,28 @@ interface TabState {
   setAuth: (auth: RequestAuth) => void;
   sendRequest: (resolveAuth?: () => RequestAuth, variableScope?: Map<string, string>) => Promise<void>;
 
-  // Persistence helpers
   linkTabToSaved: (tabId: string, savedRequestId: string, title: string) => void;
   updateSavedSnapshot: (tabId: string) => void;
 
-  // Computed
   isTabDirty: (tabId: string) => boolean;
   getActiveTab: () => Tab | null;
 }
 
-function updateActiveTab(
+function updateActiveRequestTab(
   tabs: Tab[],
   activeTabId: string | null,
   updater: (state: TabRequestState) => Partial<TabRequestState>,
 ): Tab[] {
   if (!activeTabId) return tabs;
-  return tabs.map((t) =>
-    t.id === activeTabId
-      ? { ...t, state: { ...t.state, ...updater(t.state) } }
-      : t,
-  );
+  return tabs.map((t) => {
+    if (t.id !== activeTabId) return t;
+    if (!isRequestTab(t)) return t;
+    return { ...t, state: { ...t.state, ...updater(t.state) } };
+  });
 }
+
+const SETTINGS_TAB_ID = "settings-tab";
+const ENVIRONMENTS_TAB_ID = "environments-tab";
 
 export const useTabStore = create<TabState>((set, get) => ({
   tabs: [],
@@ -158,8 +176,9 @@ export const useTabStore = create<TabState>((set, get) => ({
 
   openNewTab: () => {
     const id = generateId();
-    const tab: Tab = {
+    const tab: RequestTab = {
       id,
+      type: "request",
       savedRequestId: null,
       historyEntryId: null,
       readOnly: false,
@@ -175,16 +194,18 @@ export const useTabStore = create<TabState>((set, get) => ({
 
   openSavedRequest: (request) => {
     const { tabs } = get();
-    // If already open, just switch to it
-    const existing = tabs.find((t) => t.savedRequestId === request.id);
+    const existing = tabs.find(
+      (t) => isRequestTab(t) && t.savedRequestId === request.id,
+    );
     if (existing) {
       set({ activeTabId: existing.id });
       return;
     }
     const id = generateId();
     const state = stateFromSavedRequest(request);
-    const tab: Tab = {
+    const tab: RequestTab = {
       id,
+      type: "request",
       savedRequestId: request.id,
       historyEntryId: null,
       readOnly: false,
@@ -220,8 +241,9 @@ export const useTabStore = create<TabState>((set, get) => ({
           }
         : null;
 
-    const tab: Tab = {
+    const tab: RequestTab = {
       id,
+      type: "request",
       savedRequestId: null,
       historyEntryId: entry.id,
       readOnly: true,
@@ -232,7 +254,10 @@ export const useTabStore = create<TabState>((set, get) => ({
         headers: entry.headers,
         params: entry.params,
         bodyConfig: entry.body,
-        bodyCache: entry.body.type !== "none" ? { [entry.body.type]: entry.body as never } : {},
+        bodyCache:
+          entry.body.type !== "none"
+            ? { [entry.body.type]: entry.body as never }
+            : {},
         auth: entry.auth,
         response,
         loading: false,
@@ -247,12 +272,48 @@ export const useTabStore = create<TabState>((set, get) => ({
     }));
   },
 
+  openSettingsTab: () => {
+    const { tabs } = get();
+    const existing = tabs.find((t) => t.type === "settings");
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return;
+    }
+    const tab: SettingsTab = {
+      id: SETTINGS_TAB_ID,
+      type: "settings",
+      title: "Settings",
+    };
+    set((s) => ({
+      tabs: [...s.tabs, tab],
+      activeTabId: tab.id,
+    }));
+  },
+
+  openEnvironmentsTab: () => {
+    const { tabs } = get();
+    const existing = tabs.find((t) => t.type === "environments");
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return;
+    }
+    const tab: EnvironmentsTab = {
+      id: ENVIRONMENTS_TAB_ID,
+      type: "environments",
+      title: "Environments",
+    };
+    set((s) => ({
+      tabs: [...s.tabs, tab],
+      activeTabId: tab.id,
+    }));
+  },
+
   restoreFromHistory: () => {
     const tab = get().getActiveTab();
-    if (!tab || !tab.readOnly) return;
+    if (!tab || !isRequestTab(tab) || !tab.readOnly) return;
     set((s) => ({
       tabs: s.tabs.map((t) =>
-        t.id === tab.id
+        t.id === tab.id && isRequestTab(t)
           ? {
               ...t,
               historyEntryId: null,
@@ -273,7 +334,6 @@ export const useTabStore = create<TabState>((set, get) => ({
         if (newTabs.length === 0) {
           newActive = null;
         } else {
-          // Activate the tab to the left, or first
           const newIdx = Math.min(idx, newTabs.length - 1);
           newActive = newTabs[newIdx].id;
         }
@@ -288,13 +348,13 @@ export const useTabStore = create<TabState>((set, get) => ({
 
   setMethod: (method) => {
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({ method })),
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({ method })),
     }));
   },
 
   setUrl: (url, source) => {
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, () => {
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => {
         if (source === "params") {
           return { url };
         }
@@ -305,13 +365,13 @@ export const useTabStore = create<TabState>((set, get) => ({
 
   setHeaders: (headers) => {
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({ headers })),
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({ headers })),
     }));
   },
 
   setParams: (params, source) => {
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, (state) => {
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, (state) => {
         if (source === "url") {
           return { params };
         }
@@ -322,14 +382,14 @@ export const useTabStore = create<TabState>((set, get) => ({
 
   setBodyConfig: (bodyConfig) => {
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({ bodyConfig })),
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({ bodyConfig })),
     }));
   },
 
   setBodyType: (type) => {
     set((s) => {
       const tab = s.tabs.find((t) => t.id === s.activeTabId);
-      if (!tab) return s;
+      if (!tab || !isRequestTab(tab)) return s;
 
       const currentBody = tab.state.bodyConfig;
       const currentCache = tab.state.bodyCache;
@@ -365,7 +425,7 @@ export const useTabStore = create<TabState>((set, get) => ({
 
       return {
         tabs: s.tabs.map((t) =>
-          t.id === s.activeTabId
+          t.id === s.activeTabId && isRequestTab(t)
             ? { ...t, state: { ...t.state, bodyConfig: newBody, bodyCache: newCache } }
             : t,
         ),
@@ -375,20 +435,18 @@ export const useTabStore = create<TabState>((set, get) => ({
 
   setAuth: (auth) => {
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({ auth })),
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({ auth })),
     }));
   },
 
   sendRequest: async (resolveAuth, variableScope) => {
     const tab = get().getActiveTab();
-    if (!tab || tab.readOnly) return;
+    if (!tab || !isRequestTab(tab) || tab.readOnly) return;
 
-    // Resolve auth first (may come from parent collection/folder)
     const stateWithAuth = resolveAuth
       ? { ...tab.state, auth: resolveAuth() }
       : tab.state;
 
-    // Resolve variables if scope is provided
     const resolved = variableScope
       ? resolveRequest(stateWithAuth, variableScope)
       : stateWithAuth;
@@ -397,7 +455,7 @@ export const useTabStore = create<TabState>((set, get) => ({
 
     if (!url.trim()) {
       set((s) => ({
-        tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({
+        tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({
           error: "URL is required",
         })),
       }));
@@ -405,13 +463,12 @@ export const useTabStore = create<TabState>((set, get) => ({
     }
 
     set((s) => ({
-      tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({
+      tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({
         loading: true,
         error: null,
       })),
     }));
 
-    // Build HTTP config from settings
     const settings = useSettingsStore.getState();
     const config = {
       timeout_ms: settings.timeoutMs,
@@ -447,13 +504,12 @@ export const useTabStore = create<TabState>((set, get) => ({
       });
 
       set((s) => ({
-        tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({
+        tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({
           response,
           loading: false,
         })),
       }));
 
-      // Log to history (fire-and-forget)
       useHistoryStore.getState().logEntry({
         method: tab.state.method,
         url: tab.state.url,
@@ -473,13 +529,12 @@ export const useTabStore = create<TabState>((set, get) => ({
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       set((s) => ({
-        tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({
+        tabs: updateActiveRequestTab(s.tabs, s.activeTabId, () => ({
           error: errorMsg,
           loading: false,
         })),
       }));
 
-      // Log error to history too
       useHistoryStore.getState().logEntry({
         method: tab.state.method,
         url: tab.state.url,
@@ -502,7 +557,7 @@ export const useTabStore = create<TabState>((set, get) => ({
   linkTabToSaved: (tabId, savedRequestId, title) => {
     set((s) => ({
       tabs: s.tabs.map((t) =>
-        t.id === tabId
+        t.id === tabId && isRequestTab(t)
           ? {
               ...t,
               savedRequestId,
@@ -517,14 +572,16 @@ export const useTabStore = create<TabState>((set, get) => ({
   updateSavedSnapshot: (tabId) => {
     set((s) => ({
       tabs: s.tabs.map((t) =>
-        t.id === tabId ? { ...t, savedSnapshot: { ...t.state } } : t,
+        t.id === tabId && isRequestTab(t)
+          ? { ...t, savedSnapshot: { ...t.state } }
+          : t,
       ),
     }));
   },
 
   isTabDirty: (tabId) => {
     const tab = get().tabs.find((t) => t.id === tabId);
-    if (!tab || !tab.savedSnapshot) return false;
+    if (!tab || !isRequestTab(tab) || !tab.savedSnapshot) return false;
     return !stateEqual(tab.state, tab.savedSnapshot);
   },
 

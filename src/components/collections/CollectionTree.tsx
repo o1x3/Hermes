@@ -23,7 +23,7 @@ import {
   requestActions,
 } from "./TreeContextMenu";
 import { MoveRequestDialog } from "./MoveRequestDialog";
-import { useTabStore } from "@/stores/tabStore";
+import { useTabStore, isRequestTab } from "@/stores/tabStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { buildTree } from "@/lib/tree-utils";
 import { exportCollectionToJson, requestToCurl } from "@/lib/export-utils";
@@ -312,7 +312,7 @@ function RequestSubNode({
   const [renaming, setRenaming] = useState(false);
   const openSavedRequest = useTabStore((s) => s.openSavedRequest);
   const activeTab = useTabStore((s) => s.getActiveTab());
-  const isActive = activeTab?.savedRequestId === node.data.id;
+  const isActive = activeTab && isRequestTab(activeTab) && activeTab.savedRequestId === node.data.id || false;
   const updateSavedRequest = useCollectionStore((s) => s.updateSavedRequest);
   const deleteSavedRequest = useCollectionStore((s) => s.deleteSavedRequest);
   const duplicateRequest = useCollectionStore((s) => s.duplicateRequest);

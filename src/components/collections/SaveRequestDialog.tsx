@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCollectionStore } from "@/stores/collectionStore";
-import { useTabStore } from "@/stores/tabStore";
+import { useTabStore, isRequestTab } from "@/stores/tabStore";
 
 interface SaveRequestDialogProps {
   open: boolean;
@@ -54,7 +54,7 @@ export function SaveRequestDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeTab || !name.trim() || !collectionId) return;
+    if (!activeTab || !isRequestTab(activeTab) || !name.trim() || !collectionId) return;
 
     setLoading(true);
     try {
