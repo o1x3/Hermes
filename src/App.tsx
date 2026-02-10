@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { MiniSidebar } from "@/components/layout/MiniSidebar";
 import { MainSidebar } from "@/components/layout/MainSidebar";
 import { Titlebar } from "@/components/layout/Titlebar";
@@ -514,7 +515,8 @@ function App() {
 
   return (
     <>
-      <div className="h-screen w-screen flex">
+      <SidebarProvider className="h-screen w-screen overflow-hidden">
+        <div className="flex h-full w-full">
         <MiniSidebar
           onOpenSettings={() => {}}
           onCreateTeam={() => setShowCreateTeam(true)}
@@ -541,6 +543,7 @@ function App() {
           </div>
         </div>
       </div>
+      </SidebarProvider>
 
       <CreateCollectionDialog
         open={showCreateCollection}
