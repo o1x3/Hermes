@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { EditorView, keymap } from "@codemirror/view";
 import {
@@ -17,6 +17,8 @@ import {
   singleLine,
   type VariableCompletionItem,
 } from "@/lib/codemirror/variable-extension";
+import { parseCurl, type CurlImport } from "@/lib/import/curl";
+import { cn } from "@/lib/utils";
 
 const METHODS: HttpMethod[] = [
   "GET",
@@ -82,6 +84,35 @@ const urlBarTheme = EditorView.theme({
   },
 });
 
+function isCompleteCurlCommand(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed.toLowerCase().startsWith("curl")) return false;
+
+  const hasUrl = /https?:\/\/[^\s]+/.test(input) || /--url\s+['"]?[^\s'"]+/.test(input);
+  if (!hasUrl) return false;
+
+  let singleQuotes = 0;
+  let doubleQuotes = 0;
+  let escaped = false;
+
+  for (const ch of input) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === "'") singleQuotes++;
+    if (ch === '"') doubleQuotes++;
+  }
+
+  if (singleQuotes % 2 !== 0 || doubleQuotes % 2 !== 0) return false;
+
+  return true;
+}
+
 export function UrlBar({
   method,
   url,
@@ -92,6 +123,8 @@ export function UrlBar({
   onSend,
   variableItems,
   isVariableResolved,
+  onCurlDetected,
+  onCurlError,
 }: {
   method: HttpMethod;
   url: string;
@@ -102,8 +135,49 @@ export function UrlBar({
   onSend: () => void;
   variableItems?: () => VariableCompletionItem[];
   isVariableResolved?: (name: string) => boolean;
+  onCurlDetected?: (parsed: CurlImport) => void;
+  onCurlError?: (error: string) => void;
 }) {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [errorState, setErrorState] = useState<"idle" | "error">("idle");
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    };
+  }, []);
+
+  const handleUrlChange = useCallback(
+    (value: string) => {
+      setErrorState("idle");
+      onUrlChange(value);
+
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      debounceRef.current = setTimeout(() => {
+        const trimmed = value.trim();
+
+        if (!trimmed.toLowerCase().startsWith("curl")) return;
+
+        if (!isCompleteCurlCommand(trimmed)) return;
+
+        try {
+          const parsed = parseCurl(trimmed);
+          onCurlDetected?.(parsed);
+        } catch (err) {
+          setErrorState("error");
+          onCurlError?.(err instanceof Error ? err.message : "Invalid cURL command");
+
+          if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+          errorTimeoutRef.current = setTimeout(() => setErrorState("idle"), 2000);
+        }
+      }, 300);
+    },
+    [onUrlChange, onCurlDetected, onCurlError],
+  );
 
   const extensions = useMemo(() => {
     const exts = [
@@ -128,7 +202,6 @@ export function UrlBar({
           },
         },
       ]),
-      // placeholder
       EditorView.contentAttributes.of({ "aria-label": "Request URL" }),
     ];
 
@@ -144,7 +217,6 @@ export function UrlBar({
 
   return (
     <div className="flex items-center gap-3">
-      {/* Method dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild disabled={disabled}>
           <Button
@@ -170,20 +242,22 @@ export function UrlBar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* URL input — CodeMirror single-line editor */}
       <div
         data-testid="url-input"
-        className="flex-1 h-10 rounded-lg border border-border bg-background px-4 overflow-hidden focus-within:ring-2 focus-within:ring-ring/40 focus-within:border-primary/50 transition-colors"
+        className={cn(
+          "flex-1 h-10 rounded-lg border border-border bg-background px-4 overflow-hidden focus-within:ring-2 focus-within:ring-ring/40 focus-within:border-primary/50 transition-colors",
+          errorState === "error" && "url-bar-error",
+        )}
       >
         <CodeMirror
           ref={editorRef}
           value={url}
-          onChange={onUrlChange}
+          onChange={handleUrlChange}
           extensions={extensions}
           theme="none"
           readOnly={disabled}
           editable={!disabled}
-          placeholder="Enter request URL"
+          placeholder="Enter request URL or paste a cURL command"
           basicSetup={{
             lineNumbers: false,
             foldGutter: false,
@@ -193,7 +267,7 @@ export function UrlBar({
             syntaxHighlighting: false,
             bracketMatching: false,
             closeBrackets: false,
-            autocompletion: false, // we provide our own
+            autocompletion: false,
             searchKeymap: false,
             dropCursor: false,
             rectangularSelection: false,
@@ -206,29 +280,30 @@ export function UrlBar({
         />
       </div>
 
-      {/* Send button */}
-      {!disabled && <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={onSend}
-              disabled={loading}
-              size="lg"
-              className="h-10 px-5 rounded-lg gap-2 font-semibold text-sm"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              {loading ? "Sending…" : "Send"}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <span className="text-xs">⌘ Enter</span>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>}
+      {!disabled && (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={onSend}
+                disabled={loading}
+                size="lg"
+                className="h-10 px-5 rounded-lg gap-2 font-semibold text-sm"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {loading ? "Sending…" : "Send"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <span className="text-xs">⌘ Enter</span>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }

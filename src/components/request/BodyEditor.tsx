@@ -24,6 +24,7 @@ import {
 interface BodyEditorProps {
   body: RequestBody;
   onChange: (body: RequestBody) => void;
+  onTypeChange: (type: RequestBody["type"]) => void;
   variableItems?: () => VariableCompletionItem[];
   isVariableResolved?: (name: string) => boolean;
   disabled?: boolean;
@@ -39,29 +40,14 @@ const BODY_TYPES: { value: BodyType; label: string }[] = [
   { value: "binary", label: "Binary" },
 ];
 
-function defaultBody(type: BodyType): RequestBody {
-  switch (type) {
-    case "raw":
-      return { type: "raw", format: "json", content: "" };
-    case "form-data":
-      return { type: "form-data", entries: [] };
-    case "x-www-form-urlencoded":
-      return { type: "x-www-form-urlencoded", entries: [] };
-    case "binary":
-      return { type: "binary", filePath: "" };
-    default:
-      return { type: "none" };
-  }
-}
-
-export function BodyEditor({ body, onChange, variableItems, isVariableResolved, disabled }: BodyEditorProps) {
-  const handleTypeChange = useCallback(
-    (type: string) => {
-      onChange(defaultBody(type as BodyType));
-    },
-    [onChange],
-  );
-
+export function BodyEditor({
+  body,
+  onChange,
+  onTypeChange,
+  variableItems,
+  isVariableResolved,
+  disabled,
+}: BodyEditorProps) {
   const handleBeautify = useCallback(() => {
     if (body.type !== "raw" || body.format !== "json") return;
     try {
@@ -93,16 +79,20 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved, 
       exts.push(variableAutocomplete(variableItems));
     }
     return exts;
-  }, [body.type, body.type === "raw" ? body.format : null, variableItems, isVariableResolved]);
+  }, [
+    body.type,
+    body.type === "raw" ? body.format : null,
+    variableItems,
+    isVariableResolved,
+  ]);
 
   return (
     <div className="space-y-3">
-      {/* Type selector */}
       <div className="flex items-center gap-2 flex-wrap">
         {BODY_TYPES.map((t) => (
           <button
             key={t.value}
-            onClick={() => handleTypeChange(t.value)}
+            onClick={() => onTypeChange(t.value)}
             disabled={disabled}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${disabled ? "" : "cursor-pointer"} ${
               body.type === t.value
@@ -115,14 +105,12 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved, 
         ))}
       </div>
 
-      {/* None */}
       {body.type === "none" && (
         <p className="text-xs text-muted-foreground">
           This request does not have a body.
         </p>
       )}
 
-      {/* Raw */}
       {body.type === "raw" && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -173,7 +161,6 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved, 
         </div>
       )}
 
-      {/* Form data / URL encoded */}
       {(body.type === "form-data" || body.type === "x-www-form-urlencoded") && (
         <KeyValueEditor
           entries={body.entries}
@@ -184,7 +171,6 @@ export function BodyEditor({ body, onChange, variableItems, isVariableResolved, 
         />
       )}
 
-      {/* Binary */}
       {body.type === "binary" && (
         <p className="text-xs text-muted-foreground">
           Binary upload coming in a future update.

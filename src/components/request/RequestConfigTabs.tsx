@@ -24,6 +24,7 @@ interface RequestConfigTabsProps {
   onHeadersChange: (headers: HeaderEntry[]) => void;
   onAuthChange: (auth: RequestAuth) => void;
   onBodyConfigChange: (body: RequestBody) => void;
+  onBodyTypeChange: (type: RequestBody["type"]) => void;
   inheritedAuth?: InheritedAuth | null;
   variableItems?: () => VariableCompletionItem[];
   isVariableResolved?: (name: string) => boolean;
@@ -43,6 +44,7 @@ export function RequestConfigTabs({
   onHeadersChange,
   onAuthChange,
   onBodyConfigChange,
+  onBodyTypeChange,
   inheritedAuth,
   variableItems,
   isVariableResolved,
@@ -114,7 +116,14 @@ export function RequestConfigTabs({
       </TabsContent>
 
       <TabsContent value="body" className="overflow-y-auto p-4">
-        <BodyEditor body={bodyConfig} onChange={onBodyConfigChange} variableItems={variableItems} isVariableResolved={isVariableResolved} disabled={disabled} />
+        <BodyEditor
+          body={bodyConfig}
+          onChange={onBodyConfigChange}
+          onTypeChange={onBodyTypeChange}
+          variableItems={variableItems}
+          isVariableResolved={isVariableResolved}
+          disabled={disabled}
+        />
       </TabsContent>
     </Tabs>
   );

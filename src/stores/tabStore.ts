@@ -8,6 +8,15 @@ import type {
   RequestAuth,
   HttpResponse,
 } from "@/types/request";
+
+type BodyType = RequestBody["type"];
+
+interface BodyCache {
+  raw?: Extract<RequestBody, { type: "raw" }>;
+  "form-data"?: Extract<RequestBody, { type: "form-data" }>;
+  "x-www-form-urlencoded"?: Extract<RequestBody, { type: "x-www-form-urlencoded" }>;
+  binary?: Extract<RequestBody, { type: "binary" }>;
+}
 import type { SavedRequest } from "@/types/collection";
 import type { HistoryEntry } from "@/types/history";
 import {
@@ -32,6 +41,7 @@ export interface TabRequestState {
   headers: HeaderEntry[];
   params: ParamEntry[];
   bodyConfig: RequestBody;
+  bodyCache: BodyCache;
   auth: RequestAuth;
   response: HttpResponse | null;
   loading: boolean;
@@ -55,6 +65,7 @@ function defaultTabState(): TabRequestState {
     headers: [],
     params: [],
     bodyConfig: { type: "none" },
+    bodyCache: {},
     auth: { type: "none" },
     response: null,
     loading: false,
@@ -63,12 +74,17 @@ function defaultTabState(): TabRequestState {
 }
 
 function stateFromSavedRequest(req: SavedRequest): TabRequestState {
+  const cache: BodyCache = {};
+  if (req.body.type !== "none") {
+    cache[req.body.type] = req.body as never;
+  }
   return {
     method: req.method,
     url: req.url,
     headers: req.headers,
     params: req.params,
     bodyConfig: req.body,
+    bodyCache: cache,
     auth: req.auth,
     response: null,
     loading: false,
@@ -110,6 +126,7 @@ interface TabState {
   setHeaders: (headers: HeaderEntry[]) => void;
   setParams: (params: ParamEntry[], source?: "params" | "url") => void;
   setBodyConfig: (body: RequestBody) => void;
+  setBodyType: (type: BodyType) => void;
   setAuth: (auth: RequestAuth) => void;
   sendRequest: (resolveAuth?: () => RequestAuth, variableScope?: Map<string, string>) => Promise<void>;
 
@@ -215,6 +232,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         headers: entry.headers,
         params: entry.params,
         bodyConfig: entry.body,
+        bodyCache: entry.body.type !== "none" ? { [entry.body.type]: entry.body as never } : {},
         auth: entry.auth,
         response,
         loading: false,
@@ -306,6 +324,53 @@ export const useTabStore = create<TabState>((set, get) => ({
     set((s) => ({
       tabs: updateActiveTab(s.tabs, s.activeTabId, () => ({ bodyConfig })),
     }));
+  },
+
+  setBodyType: (type) => {
+    set((s) => {
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      if (!tab) return s;
+
+      const currentBody = tab.state.bodyConfig;
+      const currentCache = tab.state.bodyCache;
+
+      const newCache = { ...currentCache };
+      if (currentBody.type !== "none") {
+        newCache[currentBody.type] = currentBody as never;
+      }
+
+      let newBody: RequestBody;
+      if (type === "none") {
+        newBody = { type: "none" };
+      } else if (newCache[type]) {
+        newBody = newCache[type] as RequestBody;
+      } else {
+        switch (type) {
+          case "raw":
+            newBody = { type: "raw", format: "json", content: "" };
+            break;
+          case "form-data":
+            newBody = { type: "form-data", entries: [] };
+            break;
+          case "x-www-form-urlencoded":
+            newBody = { type: "x-www-form-urlencoded", entries: [] };
+            break;
+          case "binary":
+            newBody = { type: "binary", filePath: "" };
+            break;
+          default:
+            newBody = { type: "none" };
+        }
+      }
+
+      return {
+        tabs: s.tabs.map((t) =>
+          t.id === s.activeTabId
+            ? { ...t, state: { ...t.state, bodyConfig: newBody, bodyCache: newCache } }
+            : t,
+        ),
+      };
+    });
   },
 
   setAuth: (auth) => {

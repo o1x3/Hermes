@@ -35,6 +35,8 @@ import {
 import { unshareCollection } from "@/lib/sync-utils";
 import { supabase } from "@/lib/supabase";
 import type { VariableCompletionItem } from "@/lib/codemirror/variable-extension";
+import type { CurlImport } from "@/lib/import/curl";
+import { useUndoStore } from "@/stores/undoStore";
 import { invoke } from "@tauri-apps/api/core";
 import { Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,6 +79,7 @@ function App() {
   const setHeaders = useTabStore((s) => s.setHeaders);
   const setParams = useTabStore((s) => s.setParams);
   const setBodyConfig = useTabStore((s) => s.setBodyConfig);
+  const setBodyType = useTabStore((s) => s.setBodyType);
   const setAuth = useTabStore((s) => s.setAuth);
   const sendRequest = useTabStore((s) => s.sendRequest);
   const openHistoryEntry = useTabStore((s) => s.openHistoryEntry);
@@ -351,6 +354,75 @@ function App() {
     }
   }, []);
 
+  const handleUndo = useCallback(() => {
+    const snapshot = useUndoStore.getState().pop();
+    if (!snapshot) return;
+
+    const activeTabId = useTabStore.getState().activeTabId;
+    if (snapshot.tabId !== activeTabId) {
+      toast.error("Cannot undo: tab has changed");
+      return;
+    }
+
+    setMethod(snapshot.state.method);
+    setUrl(snapshot.state.url);
+    setHeaders(snapshot.state.headers);
+    setParams(snapshot.state.params);
+    setBodyConfig(snapshot.state.bodyConfig);
+    setAuth(snapshot.state.auth);
+
+    toast.success("Undo successful");
+  }, [setMethod, setUrl, setHeaders, setParams, setBodyConfig, setAuth]);
+
+  const handleCurlDetected = useCallback(
+    (parsed: CurlImport) => {
+      const tab = useTabStore.getState().getActiveTab();
+      if (!tab) return;
+
+      useUndoStore.getState().push({
+        label: "cURL import",
+        tabId: tab.id,
+        state: {
+          method: tab.state.method,
+          url: tab.state.url,
+          headers: tab.state.headers,
+          params: tab.state.params,
+          bodyConfig: tab.state.bodyConfig,
+          auth: tab.state.auth,
+        },
+      });
+
+      setMethod(parsed.method);
+      setUrl(parsed.url);
+      setHeaders(parsed.headers);
+      setBodyConfig(parsed.body);
+      setAuth(parsed.auth);
+
+      const summary: string[] = [];
+      if (parsed.headers.length)
+        summary.push(
+          `${parsed.headers.length} header${parsed.headers.length > 1 ? "s" : ""}`,
+        );
+      if (parsed.body.type !== "none") summary.push("body");
+      if (parsed.auth.type !== "none") summary.push("auth");
+
+      toast.success(
+        `Imported cURL${summary.length ? ` (${summary.join(", ")})` : ""}`,
+        {
+          action: {
+            label: "Undo",
+            onClick: handleUndo,
+          },
+        },
+      );
+    },
+    [setMethod, setUrl, setHeaders, setBodyConfig, setAuth, handleUndo],
+  );
+
+  const handleCurlError = useCallback((error: string) => {
+    toast.error(`Failed to parse cURL: ${error}`);
+  }, []);
+
   useKeyboard({
     onSend: handleSend,
     onFocusUrl: focusUrl,
@@ -421,6 +493,8 @@ function App() {
                 onSend={handleSend}
                 variableItems={getVariableItems}
                 isVariableResolved={isVariableResolved}
+                onCurlDetected={handleCurlDetected}
+                onCurlError={handleCurlError}
               />
             </div>
           ) : null
@@ -436,6 +510,7 @@ function App() {
               onHeadersChange={setHeaders}
               onAuthChange={setAuth}
               onBodyConfigChange={setBodyConfig}
+              onBodyTypeChange={setBodyType}
               inheritedAuth={inheritedAuth}
               variableItems={getVariableItems}
               isVariableResolved={isVariableResolved}

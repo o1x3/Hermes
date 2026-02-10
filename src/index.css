@@ -231,3 +231,34 @@
 .titlebar-tabs::-webkit-scrollbar {
   display: none;
 }
+
+/* Shake animation for curl parse errors */
+@keyframes url-bar-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-4px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+.url-bar-error {
+  animation: url-bar-shake 0.5s ease-in-out;
+  border-color: var(--destructive) !important;
+  box-shadow: 0 0 0 2px oklch(0.577 0.245 27.325 / 0.2);
+}
+
+.url-bar-error:focus-within {
+  box-shadow: 0 0 0 2px oklch(0.577 0.245 27.325 / 0.4);
+}
